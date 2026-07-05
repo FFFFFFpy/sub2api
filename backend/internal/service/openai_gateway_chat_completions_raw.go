@@ -159,7 +159,33 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	if err != nil {
 		return nil, err
 	}
-	SetActualOpenAIUpstreamEndpoint(c, grokChatRawEndpoint)
+
+	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+	upstreamReq, err := http.NewRequestWithContext(upstreamCtx, http.MethodPost, targetURL, bytes.NewReader(upstreamBody))
+	releaseUpstreamCtx()
+	if err != nil {
+		return nil, fmt.Errorf("build upstream request: %w", err)
+	}
+	upstreamReq = upstreamReq.WithContext(WithHTTPUpstreamProfile(upstreamReq.Context(), HTTPUpstreamProfileOpenAI))
+	upstreamReq.Header.Set("Content-Type", "application/json")
+	upstreamReq.Header.Set("Authorization", "Bearer "+token)
+	if clientStream {
+		upstreamReq.Header.Set("Accept", "text/event-stream")
+	} else if accept := strings.TrimSpace(c.GetHeader("Accept")); accept != "" {
+		upstreamReq.Header.Set("Accept", accept)
+	} else {
+		upstreamReq.Header.Set("Accept", "application/json")
+	}
+
+	// 透传白名单中的客户端 header。详见 openaiCCRawAllowedHeaders 的设计说明。
+	for key, values := range c.Request.Header {
+		lowerKey := strings.ToLower(key)
+		if openaiCCRawAllowedHeaders[lowerKey] {
+			for _, v := range values {
+				upstreamReq.Header.Add(key, v)
+			}
+		}
+	}
 	customUA := account.GetOpenAIUserAgent()
 	if customUA == "" && account.IsGrokOAuth() {
 		customUA = "sub2api-grok/1.0"
@@ -230,6 +256,22 @@ func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, 
 			return "", fmt.Errorf("invalid grok base_url: %w", err)
 		}
 		return targetURL, nil
+	}
+	if account.IsVolcengineCoding() {
+		baseURL := volcengineCodingBaseURL(account.GetCredential("base_url"))
+		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+		if err != nil {
+			return "", fmt.Errorf("invalid base_url: %w", err)
+		}
+		return buildVolcengineCodingURL(validatedURL, "/chat/completions"), nil
+	}
+	if account.IsXunfeiCoding() {
+		baseURL := xunfeiCodingBaseURL(account.GetCredential("base_url"))
+		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+		if err != nil {
+			return "", fmt.Errorf("invalid base_url: %w", err)
+		}
+		return buildXunfeiCodingChatCompletionsURL(validatedURL), nil
 	}
 
 	return s.openAIChatCompletionsTargetURL(account)

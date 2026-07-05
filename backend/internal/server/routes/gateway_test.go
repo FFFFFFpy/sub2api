@@ -343,3 +343,59 @@ func TestGatewayRoutesOpenAICountTokensPathIsRegistered(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.NotEqual(t, http.StatusNotFound, w.Code)
 }
+
+func TestGatewayRoutesCodingPlatformsAllowOpenAICompatibleEndpoints(t *testing.T) {
+	for _, platform := range []string{service.PlatformVolcengineCoding, service.PlatformXunfeiCoding} {
+		t.Run(platform, func(t *testing.T) {
+			router := newGatewayRoutesTestRouter(platform)
+			for _, tc := range []struct {
+				path string
+				body string
+			}{
+				{"/v1/chat/completions", `{"model":"coding-model","messages":[]}`},
+				{"/chat/completions", `{"model":"coding-model","messages":[]}`},
+				{"/v1/responses", `{"model":"coding-model","input":"hi"}`},
+				{"/responses", `{"model":"coding-model","input":"hi"}`},
+				{"/v1/embeddings", `{"model":"embedding-model","input":"hi"}`},
+				{"/embeddings", `{"model":"embedding-model","input":"hi"}`},
+				{"/v1/rerank", `{"model":"rerank-model","query":"q","documents":["a"]}`},
+				{"/rerank", `{"model":"rerank-model","query":"q","documents":["a"]}`},
+			} {
+				req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+				req.Header.Set("Content-Type", "application/json")
+				w := httptest.NewRecorder()
+
+				router.ServeHTTP(w, req)
+				require.NotEqual(t, http.StatusNotFound, w.Code, "platform=%s path=%s should reach handler", platform, tc.path)
+			}
+		})
+	}
+}
+
+func TestGatewayRoutesRerankRejectsUnsupportedPlatforms(t *testing.T) {
+	router := newGatewayRoutesTestRouter(service.PlatformOpenAI)
+
+	for _, path := range []string{"/v1/rerank", "/rerank"} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"rerank-model","query":"q","documents":["a"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusNotFound, w.Code, "path=%s", path)
+		require.Contains(t, w.Body.String(), "Rerank API is not supported for this platform")
+	}
+}
+
+func TestGatewayRoutesEmbeddingsStillRejectUnsupportedPlatforms(t *testing.T) {
+	router := newGatewayRoutesTestRouter(service.PlatformGrok)
+
+	for _, path := range []string{"/v1/embeddings", "/embeddings"} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"embedding-model","input":"hi"}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusNotFound, w.Code, "path=%s", path)
+		require.Contains(t, w.Body.String(), "Embeddings API is not supported for this platform")
+	}
+}

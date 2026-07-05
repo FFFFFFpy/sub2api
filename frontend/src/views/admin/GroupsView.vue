@@ -583,6 +583,23 @@
           <p class="input-hint">{{ t("admin.groups.copyAccounts.hint") }}</p>
         </div>
         <div>
+          <label class="flex cursor-pointer items-start gap-2">
+            <input
+              v-model="createForm.bind_ungrouped_accounts"
+              type="checkbox"
+              class="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <span>
+              <span class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t("admin.groups.bindUngrouped.title") }}
+              </span>
+              <span class="block text-xs text-gray-500 dark:text-gray-400">
+                {{ t("admin.groups.bindUngrouped.hint") }}
+              </span>
+            </span>
+          </label>
+        </div>
+        <div>
           <label class="input-label">{{
             t("admin.groups.form.rateMultiplier")
           }}</label>
@@ -2102,6 +2119,23 @@
           <p class="input-hint">
             {{ t("admin.groups.copyAccounts.hintEdit") }}
           </p>
+        </div>
+        <div>
+          <label class="flex cursor-pointer items-start gap-2">
+            <input
+              v-model="editForm.bind_ungrouped_accounts"
+              type="checkbox"
+              class="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <span>
+              <span class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t("admin.groups.bindUngrouped.title") }}
+              </span>
+              <span class="block text-xs text-gray-500 dark:text-gray-400">
+                {{ t("admin.groups.bindUngrouped.hintEdit") }}
+              </span>
+            </span>
+          </label>
         </div>
         <div>
           <label class="input-label">{{
@@ -4216,7 +4250,8 @@ const platformOptions = computed(() => [
   { value: "gemini", label: "Gemini" },
   { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
-  { value: "composite", label: "Composite" },
+  { value: "volcengine_coding", label: "火山 Ark Coding" },
+  { value: "xunfei_coding", label: "讯飞 Coding/MaaS" },
 ]);
 
 const platformFilterOptions = computed(() => [
@@ -4226,46 +4261,8 @@ const platformFilterOptions = computed(() => [
   { value: "gemini", label: "Gemini" },
   { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
-  { value: "composite", label: "Composite" },
-]);
-
-const compositeRoutePlatformOptions = computed(() => [
-  { value: "anthropic", label: "Anthropic" },
-  { value: "openai", label: "OpenAI" },
-  { value: "gemini", label: "Gemini" },
-  { value: "antigravity", label: "Antigravity" },
-  { value: "grok", label: "Grok" },
-]);
-
-const compositeRouteEndpointOptions = computed(() => [
-  { value: "any", label: t("admin.groups.compositeRoutes.endpoints.any") },
-  {
-    value: "messages",
-    label: t("admin.groups.compositeRoutes.endpoints.messages"),
-  },
-  {
-    value: "count_tokens",
-    label: t("admin.groups.compositeRoutes.endpoints.countTokens"),
-  },
-  {
-    value: "responses",
-    label: t("admin.groups.compositeRoutes.endpoints.responses"),
-  },
-  {
-    value: "chat_completions",
-    label: t("admin.groups.compositeRoutes.endpoints.chatCompletions"),
-  },
-  {
-    value: "embeddings",
-    label: t("admin.groups.compositeRoutes.endpoints.embeddings"),
-  },
-  { value: "images", label: t("admin.groups.compositeRoutes.endpoints.images") },
-  { value: "gemini", label: t("admin.groups.compositeRoutes.endpoints.gemini") },
-]);
-
-const compositeRouteMatchOptions = computed(() => [
-  { value: "exact", label: t("admin.groups.compositeRoutes.match.exact") },
-  { value: "prefix", label: t("admin.groups.compositeRoutes.match.prefix") },
+  { value: "volcengine_coding", label: "火山 Ark Coding" },
+  { value: "xunfei_coding", label: "讯飞 Coding/MaaS" },
 ]);
 
 const editStatusOptions = computed(() => [
@@ -4550,6 +4547,7 @@ const createForm = reactive({
   mcp_xml_inject: true,
   // 从分组复制账号
   copy_accounts_from_group_ids: [] as number[],
+  bind_ungrouped_accounts: false,
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
   max_reasoning_effort: "",
@@ -4900,6 +4898,7 @@ const editForm = reactive({
   mcp_xml_inject: true,
   // 从分组复制账号
   copy_accounts_from_group_ids: [] as number[],
+  bind_ungrouped_accounts: false,
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
   max_reasoning_effort: "",
@@ -5292,6 +5291,7 @@ const closeCreateModal = () => {
   createForm.supported_model_scopes = ["claude", "gemini_text", "gemini_image"];
   createForm.mcp_xml_inject = true;
   createForm.copy_accounts_from_group_ids = [];
+  createForm.bind_ungrouped_accounts = false;
   createForm.rpm_limit = 0;
   createForm.max_reasoning_effort = "";
   createForm.reasoning_effort_mappings = [];
@@ -5489,6 +5489,7 @@ const handleEdit = async (group: AdminGroup) => {
   ];
   editForm.mcp_xml_inject = group.mcp_xml_inject ?? true;
   editForm.copy_accounts_from_group_ids = []; // 复制账号字段每次编辑时重置为空
+  editForm.bind_ungrouped_accounts = false;
   editForm.rpm_limit = group.rpm_limit ?? 0;
   editForm.max_reasoning_effort = normalizeReasoningEffortForPlatform(
     group.platform,
@@ -5519,6 +5520,7 @@ const closeEditModal = () => {
   editReasoningEffortPolicyRef.value?.resetValidation();
   editModelRoutingRules.value = [];
   editForm.copy_accounts_from_group_ids = [];
+  editForm.bind_ungrouped_accounts = false;
   editForm.peak_rate_enabled = false;
   editForm.peak_start = "";
   editForm.peak_end = "";

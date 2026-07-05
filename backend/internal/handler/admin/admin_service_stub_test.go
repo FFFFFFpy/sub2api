@@ -10,35 +10,28 @@ import (
 )
 
 type stubAdminService struct {
-	users                               []service.User
-	apiKeys                             []service.APIKey
-	groups                              []service.Group
-	accounts                            []service.Account
-	accountSchedulerScoreFilterAccounts []service.Account
-	openAISchedulerScorePoolAccounts    []service.Account
-	schedulerScoreFilterCalls           int
-	openAISchedulerScorePoolCalls       int
-	proxies                             []service.Proxy
-	proxyCounts                         []service.ProxyWithAccountCount
-	redeems                             []service.RedeemCode
-	boundAuthIdentity                   *service.AdminBindAuthIdentityInput
-	boundAuthIdentityFor                int64
-	createdAccounts                     []*service.CreateAccountInput
-	createdProxies                      []*service.CreateProxyInput
-	updatedProxyIDs                     []int64
-	updatedProxies                      []*service.UpdateProxyInput
-	testedProxyIDs                      []int64
-	getUserErr                          error
-	createAccountErr                    error
-	createSparkShadowErr                error
-	updateAccountErr                    error
-	bulkUpdateAccountErr                error
-	lastBulkUpdateAccountInput          *service.BulkUpdateAccountsInput
-	getAccountResult                    *service.Account
-	updateAccountCalls                  int
-	updateAccountExtraCalls             int
-	checkMixedErr                       error
-	lastMixedCheck                      struct {
+	users                []service.User
+	apiKeys              []service.APIKey
+	groups               []service.Group
+	accounts             []service.Account
+	proxies              []service.Proxy
+	proxyCounts          []service.ProxyWithAccountCount
+	redeems              []service.RedeemCode
+	boundAuthIdentity    *service.AdminBindAuthIdentityInput
+	boundAuthIdentityFor int64
+	createdGroups        []*service.CreateGroupInput
+	createdAccounts      []*service.CreateAccountInput
+	createdProxies       []*service.CreateProxyInput
+	updatedProxyIDs      []int64
+	updatedProxies       []*service.UpdateProxyInput
+	testedProxyIDs       []int64
+	getUserErr           error
+	createAccountErr     error
+	createSparkShadowErr error
+	updateAccountErr     error
+	bulkUpdateAccountErr error
+	checkMixedErr        error
+	lastMixedCheck       struct {
 		accountID int64
 		platform  string
 		groupIDs  []int64
@@ -352,6 +345,7 @@ func (s *stubAdminService) PreviewCompositeRoute(ctx context.Context, groupID in
 }
 
 func (s *stubAdminService) CreateGroup(ctx context.Context, input *service.CreateGroupInput) (*service.Group, error) {
+	s.createdGroups = append(s.createdGroups, input)
 	group := service.Group{ID: 200, Name: input.Name, Status: service.StatusActive}
 	return &group, nil
 }

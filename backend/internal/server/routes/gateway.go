@@ -47,7 +47,7 @@ func RegisterGatewayRoutes(
 
 	isOpenAIResponsesCompatibleGatewayPlatform := func(c *gin.Context) bool {
 		switch getGroupPlatform(c) {
-		case service.PlatformOpenAI, service.PlatformGrok:
+		case service.PlatformOpenAI, service.PlatformGrok, service.PlatformVolcengineCoding, service.PlatformXunfeiCoding:
 			return true
 		default:
 			return false
@@ -56,25 +56,34 @@ func RegisterGatewayRoutes(
 	isOpenAIGatewayPlatform := func(c *gin.Context) bool {
 		return getGroupPlatform(c) == service.PlatformOpenAI
 	}
-	countTokensHandler := func(c *gin.Context) {
+	isEmbeddingsGatewayPlatform := func(c *gin.Context) bool {
 		switch getGroupPlatform(c) {
-		case service.PlatformOpenAI:
-			h.OpenAIGateway.CountTokens(c)
-		case service.PlatformGrok:
-			h.OpenAIGateway.GrokCountTokens(c)
+		case service.PlatformOpenAI, service.PlatformVolcengineCoding, service.PlatformXunfeiCoding:
+			return true
 		default:
-			h.Gateway.CountTokens(c)
+			return false
 		}
 	}
-	modelsHandler := func(c *gin.Context) {
-		if isOpenAIGatewayPlatform(c) && c.Query("client_version") != "" {
-			h.OpenAIGateway.CodexModels(c)
+	isRerankGatewayPlatform := func(c *gin.Context) bool {
+		switch getGroupPlatform(c) {
+		case service.PlatformVolcengineCoding, service.PlatformXunfeiCoding:
+			return true
+		default:
+			return false
+		}
+	}
+	rerankHandler := func(c *gin.Context) {
+		if isRerankGatewayPlatform(c) {
+			h.OpenAIGateway.Rerank(c)
 			return
 		}
-		h.Gateway.Models(c)
-	}
-	isOpenAIOnlyEndpointGatewayPlatform := func(c *gin.Context) bool {
-		return getGroupPlatform(c) == service.PlatformOpenAI
+		service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": gin.H{
+				"type":    "not_found_error",
+				"message": "Rerank API is not supported for this platform",
+			},
+		})
 	}
 	imagesHandler := func(c *gin.Context) {
 		switch getGroupPlatform(c) {
@@ -207,8 +216,8 @@ func RegisterGatewayRoutes(
 			}
 			h.Gateway.ChatCompletions(c)
 		})
-		gateway.POST("/embeddings", textBodyLimit, func(c *gin.Context) {
-			if !isOpenAIOnlyEndpointGatewayPlatform(c) {
+		gateway.POST("/embeddings", func(c *gin.Context) {
+			if !isEmbeddingsGatewayPlatform(c) {
 				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 				c.JSON(http.StatusNotFound, gin.H{
 					"error": gin.H{
@@ -220,6 +229,7 @@ func RegisterGatewayRoutes(
 			}
 			h.OpenAIGateway.Embeddings(c)
 		})
+		gateway.POST("/rerank", rerankHandler)
 		gateway.POST("/images/generations", imagesHandler)
 		gateway.POST("/images/edits", imagesHandler)
 		gateway.POST("/images/generations/async", h.AsyncImage.Submit)
@@ -293,8 +303,8 @@ func RegisterGatewayRoutes(
 		}
 		h.Gateway.ChatCompletions(c)
 	})
-	r.POST("/embeddings", textBodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, func(c *gin.Context) {
-		if !isOpenAIOnlyEndpointGatewayPlatform(c) {
+	r.POST("/embeddings", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
+		if !isEmbeddingsGatewayPlatform(c) {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": gin.H{
@@ -306,16 +316,11 @@ func RegisterGatewayRoutes(
 		}
 		h.OpenAIGateway.Embeddings(c)
 	})
-	r.POST("/images/generations", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, imagesHandler)
-	r.POST("/images/edits", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, imagesHandler)
-	r.POST("/images/generations/async", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, h.AsyncImage.Submit)
-	r.POST("/images/edits/async", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, h.AsyncImage.Submit)
-	r.GET("/images/tasks/:task_id", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, h.AsyncImage.Get)
-	r.POST("/videos/generations", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, videoGenerationHandler)
-	r.POST("/videos/edits", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, videoEditHandler)
-	r.POST("/videos/extensions", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, videoExtensionHandler)
-	r.GET("/videos/:request_id", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, videoStatusHandler)
-	r.GET("/videos/:request_id/content", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, videoContentHandler)
+	r.POST("/rerank", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, rerankHandler)
+	r.POST("/images/generations", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, imagesHandler)
+	r.POST("/images/edits", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, imagesHandler)
+	r.POST("/videos/generations", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, videoGenerationHandler)
+	r.GET("/videos/:request_id", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, videoStatusHandler)
 
 	// Antigravity 模型列表
 	r.GET("/antigravity/models", gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.Gateway.AntigravityModels)
