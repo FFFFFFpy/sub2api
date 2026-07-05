@@ -1,0 +1,2 @@
+ALTER TABLE groups
+    ADD COLUMN IF NOT EXISTS request_passthrough_enabled BOOLEAN NOT NULL DEFAULT FALSE;

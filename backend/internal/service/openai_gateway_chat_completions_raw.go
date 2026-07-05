@@ -108,6 +108,8 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 		}
 		upstreamBody = updatedBody
 	}
+	// In external request passthrough mode the request body is intentionally left
+	// untouched. If the upstream stream omits usage, billing usage may remain 0.
 	if clientStream && !requestPassthrough {
 		var usageErr error
 		upstreamBody, usageErr = ensureOpenAIChatStreamUsage(upstreamBody)
@@ -131,8 +133,16 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 		zap.Bool("request_passthrough", requestPassthrough),
 	)
 
-	// 5. Build and send upstream request via the shared CC pipeline
-	targetURL, err := s.rawChatCompletionsURL(account)
+	// 5. Build upstream request
+	token, tokenKind, err := s.GetAccessToken(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(token) == "" {
+		return nil, fmt.Errorf("account %d missing %s credential", account.ID, tokenKind)
+	}
+
+	targetURL, err := s.rawChatCompletionsURL(account, externalOpenAIIncomingPath(c))
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +236,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	return result, forwardErr
 }
 
-func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, error) {
+func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account, incomingPath string) (string, error) {
 	if account.Platform == PlatformGrok {
 		targetURL, err := buildGrokChatCompletionsURL(account, s.cfg)
 		if err != nil {
@@ -235,7 +245,7 @@ func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, 
 		return targetURL, nil
 	}
 	if account.IsExternalOpenAICompatibleAPIKey() {
-		return s.externalOpenAICompatibleURL(account, ExternalEndpointChatCompletions, "")
+		return s.externalOpenAICompatibleURL(account, ExternalEndpointChatCompletions, incomingPath)
 	}
 
 	return s.openAIChatCompletionsTargetURL(account)

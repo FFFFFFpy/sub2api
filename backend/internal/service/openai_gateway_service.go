@@ -3759,7 +3759,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	case AccountTypeOAuth:
 		targetURL = chatgptCodexURL
 	case AccountTypeAPIKey:
-		if externalURL, handled, err := s.externalOpenAICompatibleResponsesURL(account); handled {
+		if externalURL, handled, err := s.externalOpenAICompatibleResponsesURL(account, externalOpenAIIncomingPath(c)); handled {
 			if err != nil {
 				return nil, err
 			}
@@ -4555,7 +4555,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		targetURL = chatgptCodexURL
 	case AccountTypeAPIKey:
 		// API Key accounts use Platform API or custom base URL
-		if externalURL, handled, err := s.externalOpenAICompatibleResponsesURL(account); handled {
+		if externalURL, handled, err := s.externalOpenAICompatibleResponsesURL(account, externalOpenAIIncomingPath(c)); handled {
 			if err != nil {
 				return nil, err
 			}

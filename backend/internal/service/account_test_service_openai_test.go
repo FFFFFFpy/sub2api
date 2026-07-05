@@ -550,6 +550,26 @@ func TestAccountTestService_ExternalOpenAICompatibleUsesChatCompletionsPath(t *t
 			wantURL:  "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/chat/completions",
 			wantBody: "xopqwen36v35b",
 		},
+		{
+			name: "custom chat endpoint override",
+			account: &Account{
+				ID:       103,
+				Platform: PlatformExternalOpenAI,
+				Type:     AccountTypeAPIKey,
+				Credentials: map[string]any{
+					"api_key": "custom-test",
+					"endpoint_base_urls": map[string]any{
+						"chat_completions": "https://chat.example/api",
+					},
+					"endpoint_paths": map[string]any{
+						"chat_completions": "/custom/chat",
+					},
+				},
+			},
+			modelID:  "custom-chat-model",
+			wantURL:  "https://chat.example/api/custom/chat",
+			wantBody: "custom-chat-model",
+		},
 	}
 
 	for _, tt := range tests {

@@ -56,7 +56,7 @@ func (s *OpenAIGatewayService) ForwardRerank(
 	if apiKey == "" {
 		return nil, fmt.Errorf("account %d missing api_key", account.ID)
 	}
-	targetURL, err := s.rerankURL(account)
+	targetURL, err := s.rerankURL(account, externalOpenAIIncomingPath(c))
 	if err != nil {
 		return nil, err
 	}
@@ -163,9 +163,9 @@ func (s *OpenAIGatewayService) ForwardRerank(
 	}, nil
 }
 
-func (s *OpenAIGatewayService) rerankURL(account *Account) (string, error) {
+func (s *OpenAIGatewayService) rerankURL(account *Account, incomingPath string) (string, error) {
 	if account.IsExternalOpenAICompatibleAPIKey() {
-		return s.externalOpenAICompatibleURL(account, ExternalEndpointRerank, "")
+		return s.externalOpenAICompatibleURL(account, ExternalEndpointRerank, incomingPath)
 	}
 	return "", fmt.Errorf("rerank is not supported for platform %s", account.Platform)
 }
