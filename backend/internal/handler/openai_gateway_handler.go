@@ -99,9 +99,9 @@ func wrapUsageRecordTaskContext(parent context.Context, task service.UsageRecord
 
 func openAICompatibleRequestPlatform(apiKey *service.APIKey) string {
 	if apiKey != nil && apiKey.Group != nil {
-		switch apiKey.Group.Platform {
-		case service.PlatformGrok, service.PlatformVolcengineCoding, service.PlatformXunfeiCoding:
-			return apiKey.Group.Platform
+		switch service.NormalizeOpenAICompatiblePlatformForRouting(apiKey.Group.Platform) {
+		case service.PlatformGrok, service.PlatformExternalOpenAI:
+			return service.NormalizeOpenAICompatiblePlatformForRouting(apiKey.Group.Platform)
 		}
 	}
 	return service.PlatformOpenAI
@@ -288,7 +288,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 
 	// 解析渠道级模型映射
 	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
-	forwardBody := openAIModelMappedBody(body, channelMapping.Mapped, channelMapping.MappedModel, h.gatewayService.ReplaceModelInBody)
+	mappedForwardBody := openAIModelMappedBody(body, channelMapping.Mapped, channelMapping.MappedModel, h.gatewayService.ReplaceModelInBody)
 
 	// 提前校验 function_call_output 是否具备可关联上下文，避免上游 400。
 	if !h.validateFunctionCallOutputRequest(c, body, reqLog) {
@@ -351,7 +351,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			reqModel,
 			failedAccountIDs,
 			service.OpenAIUpstreamTransportAny,
-			service.OpenAIEndpointCapabilityChatCompletions,
+			service.OpenAIEndpointCapabilityResponses,
 			requireCompact,
 			requestPlatform,
 		)
@@ -413,6 +413,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		// Forward request
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
+		requestPassthrough := account.IsExternalOpenAIRequestPassthroughEnabled(apiKey.Group)
+		service.MarkExternalOpenAIRequestPassthrough(c, requestPassthrough)
+		forwardBody := mappedForwardBody
+		if requestPassthrough {
+			forwardBody = body
+		}
 		writerSizeBeforeForward := c.Writer.Size()
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {

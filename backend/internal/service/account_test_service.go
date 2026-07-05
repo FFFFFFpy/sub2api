@@ -807,15 +807,7 @@ func (s *AccountTestService) testExternalOpenAICompatibleAccountConnection(c *gi
 	requestedModelID := testModelID
 	testModelID = account.GetMappedModel(testModelID)
 
-	baseURL := ""
-	switch {
-	case account.IsVolcengineCoding():
-		baseURL = volcengineCodingBaseURL(account.GetCredential("base_url"))
-	case account.IsXunfeiCoding():
-		baseURL = xunfeiCodingBaseURL(account.GetCredential("base_url"))
-	default:
-		baseURL = account.GetOpenAIBaseURL()
-	}
+	baseURL := account.GetOpenAIBaseURL()
 	normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
@@ -829,6 +821,23 @@ func (s *AccountTestService) testExternalOpenAICompatibleAccountConnection(c *gi
 	}
 
 	return s.testOpenAIChatCompletionsConnection(c, account, testModelID, prompt, normalizedBaseURL, authToken)
+}
+
+func (s *AccountTestService) externalOpenAICompatibleTestURL(account *Account, endpoint ExternalOpenAIEndpoint) (string, error) {
+	if !account.IsExternalOpenAICompatibleAPIKey() {
+		return "", fmt.Errorf("external OpenAI-compatible API key account is required")
+	}
+	targetURL, err := buildExternalOpenAICompatibleURL(
+		account.GetCredential("base_url"),
+		credentialStringMap(account.Credentials, "endpoint_base_urls"),
+		credentialStringMap(account.Credentials, "endpoint_paths"),
+		endpoint,
+		"",
+	)
+	if err != nil {
+		return "", err
+	}
+	return s.validateUpstreamBaseURL(targetURL)
 }
 
 func isEmbeddingTestModel(model string) bool {
@@ -871,17 +880,11 @@ func (s *AccountTestService) testExternalOpenAICompatibleEmbeddingsConnection(
 ) error {
 	ctx := c.Request.Context()
 	targetURL := buildOpenAIEmbeddingsURL(normalizedBaseURL)
-	switch {
-	case account.IsVolcengineCoding():
-		targetURL = buildVolcengineCodingURL(normalizedBaseURL, "/embeddings")
-	case account.IsXunfeiCoding():
-		targetURL = buildXunfeiCodingEmbeddingsURL(normalizedBaseURL, account.GetCredential("embedding_base_url"))
-		if embeddingBase := strings.TrimSpace(account.GetCredential("embedding_base_url")); embeddingBase != "" {
-			validatedEmbeddingBase, err := s.validateUpstreamBaseURL(xunfeiCodingBaseURL(embeddingBase))
-			if err != nil {
-				return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid embedding base URL: %s", err.Error()))
-			}
-			targetURL = buildXunfeiCodingEmbeddingsURL("", validatedEmbeddingBase)
+	if account.IsExternalOpenAICompatibleAPIKey() {
+		var err error
+		targetURL, err = s.externalOpenAICompatibleTestURL(account, ExternalEndpointEmbeddings)
+		if err != nil {
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid embeddings URL: %s", err.Error()))
 		}
 	}
 
@@ -949,30 +952,12 @@ func (s *AccountTestService) testExternalOpenAICompatibleRerankConnection(
 	authToken string,
 ) error {
 	ctx := c.Request.Context()
-	targetURL := ""
-	switch {
-	case account.IsVolcengineCoding():
-		targetURL = buildVolcengineCodingURL(normalizedBaseURL, "/rerank")
-	case account.IsXunfeiCoding():
-		embeddingBase := strings.TrimSpace(account.GetCredential("embedding_base_url"))
-		rerankBase := strings.TrimSpace(account.GetCredential("rerank_base_url"))
-		if rerankBase != "" {
-			validatedRerankBase, err := s.validateUpstreamBaseURL(xunfeiCodingBaseURL(rerankBase))
-			if err != nil {
-				return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid rerank base URL: %s", err.Error()))
-			}
-			targetURL = buildXunfeiCodingRerankURL("", "", validatedRerankBase)
-		} else if embeddingBase != "" {
-			validatedEmbeddingBase, err := s.validateUpstreamBaseURL(xunfeiCodingBaseURL(embeddingBase))
-			if err != nil {
-				return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid embedding base URL: %s", err.Error()))
-			}
-			targetURL = buildXunfeiCodingRerankURL("", validatedEmbeddingBase, "")
-		} else {
-			targetURL = buildXunfeiCodingRerankURL(normalizedBaseURL, "", "")
-		}
-	default:
+	if !account.IsExternalOpenAICompatibleAPIKey() {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Rerank test is not supported for platform %s", account.Platform))
+	}
+	targetURL, err := s.externalOpenAICompatibleTestURL(account, ExternalEndpointRerank)
+	if err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid rerank URL: %s", err.Error()))
 	}
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")

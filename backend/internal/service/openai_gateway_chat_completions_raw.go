@@ -78,34 +78,44 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	// 1b. Extract reasoning effort and service tier from the raw body before any transformation.
 	reasoningEffort := extractOpenAIReasoningEffortFromBody(body, originalModel)
 	serviceTier := extractOpenAIServiceTierFromBody(body)
+	requestPassthrough := externalOpenAIRequestPassthroughEnabled(c, account)
 
 	// 2. Resolve model mapping (same as ForwardAsChatCompletions)
 	billingModel := resolveOpenAIForwardModel(account, originalModel, defaultMappedModel)
 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
+	if requestPassthrough {
+		upstreamModel = originalModel
+	}
 	// 国产模型默认 effort 补充：需要 mappedModel 判定，推迟到 billingModel 算出之后。
-	reasoningEffort = ApplyThinkingEnabledFallback(reasoningEffort, body, billingModel)
+	if !requestPassthrough {
+		reasoningEffort = ApplyThinkingEnabledFallback(reasoningEffort, body, billingModel)
+	}
 
 	// 3. Rewrite model in body (no protocol conversion)
 	upstreamBody := body
-	if upstreamModel != originalModel {
+	if !requestPassthrough && upstreamModel != originalModel {
 		upstreamBody = ReplaceModelInBody(body, upstreamModel)
 	}
-	if normalizedBody, normalized := NormalizeGLMOpenAIReasoningEffort(upstreamBody, upstreamModel); normalized {
-		upstreamBody = normalizedBody
+	if !requestPassthrough {
+		if normalizedBody, normalized := NormalizeGLMOpenAIReasoningEffort(upstreamBody, upstreamModel); normalized {
+			upstreamBody = normalizedBody
+		}
 	}
 
 	// 4. Apply OpenAI fast policy on the CC body
-	updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, upstreamBody)
-	if policyErr != nil {
-		var blocked *OpenAIFastBlockedError
-		if errors.As(policyErr, &blocked) {
-			MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
-			writeChatCompletionsError(c, http.StatusForbidden, "permission_error", blocked.Message)
+	if !requestPassthrough {
+		updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, upstreamBody)
+		if policyErr != nil {
+			var blocked *OpenAIFastBlockedError
+			if errors.As(policyErr, &blocked) {
+				MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
+				writeChatCompletionsError(c, http.StatusForbidden, "permission_error", blocked.Message)
+			}
+			return nil, policyErr
 		}
-		return nil, policyErr
+		upstreamBody = updatedBody
 	}
-	upstreamBody = updatedBody
-	if clientStream {
+	if clientStream && !requestPassthrough {
 		var usageErr error
 		upstreamBody, usageErr = ensureOpenAIChatStreamUsage(upstreamBody)
 		if usageErr != nil {
@@ -119,6 +129,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 		zap.String("billing_model", billingModel),
 		zap.String("upstream_model", upstreamModel),
 		zap.Bool("stream", clientStream),
+		zap.Bool("request_passthrough", requestPassthrough),
 	)
 
 	// 5. Build upstream request
@@ -258,21 +269,8 @@ func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, 
 		}
 		return targetURL, nil
 	}
-	if account.IsVolcengineCoding() {
-		baseURL := volcengineCodingBaseURL(account.GetCredential("base_url"))
-		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
-		if err != nil {
-			return "", fmt.Errorf("invalid base_url: %w", err)
-		}
-		return buildVolcengineCodingURL(validatedURL, "/chat/completions"), nil
-	}
-	if account.IsXunfeiCoding() {
-		baseURL := xunfeiCodingBaseURL(account.GetCredential("base_url"))
-		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
-		if err != nil {
-			return "", fmt.Errorf("invalid base_url: %w", err)
-		}
-		return buildXunfeiCodingChatCompletionsURL(validatedURL), nil
+	if account.IsExternalOpenAICompatibleAPIKey() {
+		return s.externalOpenAICompatibleURL(account, ExternalEndpointChatCompletions, "")
 	}
 
 	baseURL := account.GetOpenAIBaseURL()

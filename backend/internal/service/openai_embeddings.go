@@ -34,8 +34,12 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 
 	billingModel := resolveOpenAIForwardModel(account, originalModel, defaultMappedModel)
 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
+	requestPassthrough := externalOpenAIRequestPassthroughEnabled(c, account)
+	if requestPassthrough {
+		upstreamModel = originalModel
+	}
 	upstreamBody := body
-	if upstreamModel != originalModel {
+	if !requestPassthrough && upstreamModel != originalModel {
 		upstreamBody = ReplaceModelInBody(body, upstreamModel)
 	}
 
@@ -50,27 +54,25 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 	if apiKey == "" {
 		return nil, fmt.Errorf("account %d missing api_key", account.ID)
 	}
-	baseURL := account.GetOpenAIBaseURL()
-	if baseURL == "" {
-		baseURL = "https://api.openai.com"
-	}
-	validatedURL, err := s.validateUpstreamBaseURL(baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid base_url: %w", err)
-	}
-	targetURL := buildOpenAIEmbeddingsURL(validatedURL)
-	switch account.Platform {
-	case PlatformVolcengineCoding:
-		targetURL = buildVolcengineCodingURL(validatedURL, "/embeddings")
-	case PlatformXunfeiCoding:
-		targetURL = buildXunfeiCodingEmbeddingsURL(validatedURL, account.GetCredential("embedding_base_url"))
-		if embeddingBase := strings.TrimSpace(account.GetCredential("embedding_base_url")); embeddingBase != "" {
-			validatedEmbeddingBase, err := s.validateUpstreamBaseURL(xunfeiCodingBaseURL(embeddingBase))
-			if err != nil {
-				return nil, fmt.Errorf("invalid embedding_base_url: %w", err)
-			}
-			targetURL = buildXunfeiCodingEmbeddingsURL("", validatedEmbeddingBase)
+	var (
+		targetURL string
+		err       error
+	)
+	if account.IsExternalOpenAICompatibleAPIKey() {
+		targetURL, err = s.externalOpenAICompatibleURL(account, ExternalEndpointEmbeddings, "")
+		if err != nil {
+			return nil, fmt.Errorf("invalid external embeddings url: %w", err)
 		}
+	} else {
+		baseURL := account.GetOpenAIBaseURL()
+		if baseURL == "" {
+			baseURL = "https://api.openai.com"
+		}
+		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid base_url: %w", err)
+		}
+		targetURL = buildOpenAIEmbeddingsURL(validatedURL)
 	}
 
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)

@@ -5,7 +5,7 @@
  * instead of defining their own color mappings.
  */
 
-export type Platform = 'anthropic' | 'openai' | 'antigravity' | 'gemini' | 'grok' | 'volcengine_coding' | 'xunfei_coding'
+export type Platform = 'anthropic' | 'openai' | 'antigravity' | 'gemini' | 'grok' | 'external_openai_compatible' | 'volcengine_coding' | 'xunfei_coding'
 
 // ── Badge (bg + text + border, for inline badges with border) ───────
 const BADGE: Record<Platform, string> = {
@@ -14,6 +14,7 @@ const BADGE: Record<Platform, string> = {
   antigravity: 'bg-purple-500/10 text-purple-600 border-purple-500/30 dark:text-purple-400',
   gemini: 'bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400',
   grok: 'bg-zinc-800/10 text-zinc-800 border-zinc-800/30 dark:bg-zinc-500/10 dark:text-zinc-200 dark:border-zinc-500/30',
+  external_openai_compatible: 'bg-teal-500/10 text-teal-700 border-teal-500/30 dark:text-teal-300',
   volcengine_coding: 'bg-red-500/10 text-red-600 border-red-500/30 dark:text-red-400',
   xunfei_coding: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/30 dark:text-cyan-400',
 }
@@ -26,6 +27,7 @@ const BADGE_LIGHT: Record<Platform, string> = {
   antigravity: 'bg-purple-500/10 text-purple-600 dark:bg-purple-500/10 dark:text-purple-300',
   gemini: 'bg-blue-500/10 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300',
   grok: 'bg-zinc-800/10 text-zinc-800 dark:bg-zinc-500/10 dark:text-zinc-200',
+  external_openai_compatible: 'bg-teal-500/10 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300',
   volcengine_coding: 'bg-red-500/10 text-red-600 dark:bg-red-500/10 dark:text-red-300',
   xunfei_coding: 'bg-cyan-500/10 text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-300',
 }
@@ -37,6 +39,7 @@ const BORDER: Record<Platform, string> = {
   antigravity: 'border-purple-500/20 dark:border-purple-500/20',
   gemini: 'border-blue-500/20 dark:border-blue-500/20',
   grok: 'border-zinc-800/20 dark:border-zinc-500/20',
+  external_openai_compatible: 'border-teal-500/20 dark:border-teal-500/20',
   volcengine_coding: 'border-red-500/20 dark:border-red-500/20',
   xunfei_coding: 'border-cyan-500/20 dark:border-cyan-500/20',
 }
@@ -49,6 +52,7 @@ const ACCENT_BAR: Record<Platform, string> = {
   antigravity: 'bg-gradient-to-r from-purple-400 to-purple-500',
   gemini: 'bg-gradient-to-r from-blue-400 to-blue-500',
   grok: 'bg-gradient-to-r from-zinc-700 to-zinc-900',
+  external_openai_compatible: 'bg-gradient-to-r from-teal-400 to-emerald-500',
   volcengine_coding: 'bg-gradient-to-r from-red-400 to-red-500',
   xunfei_coding: 'bg-gradient-to-r from-cyan-400 to-cyan-500',
 }
@@ -61,6 +65,7 @@ const TEXT: Record<Platform, string> = {
   antigravity: 'text-purple-600 dark:text-purple-400',
   gemini: 'text-blue-600 dark:text-blue-400',
   grok: 'text-zinc-800 dark:text-zinc-200',
+  external_openai_compatible: 'text-teal-700 dark:text-teal-300',
   volcengine_coding: 'text-red-600 dark:text-red-400',
   xunfei_coding: 'text-cyan-600 dark:text-cyan-400',
 }
@@ -73,6 +78,7 @@ const ICON: Record<Platform, string> = {
   antigravity: 'text-purple-500 dark:text-purple-400',
   gemini: 'text-blue-500 dark:text-blue-400',
   grok: 'text-zinc-800 dark:text-zinc-200',
+  external_openai_compatible: 'text-teal-600 dark:text-teal-300',
   volcengine_coding: 'text-red-500 dark:text-red-400',
   xunfei_coding: 'text-cyan-500 dark:text-cyan-400',
 }
@@ -85,6 +91,7 @@ const BUTTON: Record<Platform, string> = {
   antigravity: 'bg-purple-500 text-white hover:bg-purple-600 active:bg-purple-700 dark:bg-purple-500/80 dark:hover:bg-purple-500',
   gemini: 'bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700 dark:bg-blue-500/80 dark:hover:bg-blue-500',
   grok: 'bg-zinc-800 text-white hover:bg-zinc-900 active:bg-black dark:bg-zinc-700 dark:hover:bg-zinc-600',
+  external_openai_compatible: 'bg-teal-600 text-white hover:bg-teal-700 active:bg-teal-800 dark:bg-teal-600/80 dark:hover:bg-teal-600',
   volcengine_coding: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 dark:bg-red-600/80 dark:hover:bg-red-600',
   xunfei_coding: 'bg-cyan-600 text-white hover:bg-cyan-700 active:bg-cyan-800 dark:bg-cyan-600/80 dark:hover:bg-cyan-600',
 }
@@ -97,6 +104,7 @@ const DISCOUNT: Record<Platform, string> = {
   antigravity: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
   gemini: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   grok: 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200',
+  external_openai_compatible: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200',
   volcengine_coding: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
   xunfei_coding: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
 }
@@ -109,6 +117,7 @@ const GRADIENT: Record<Platform, string> = {
   antigravity: 'from-purple-500 to-purple-600',
   gemini: 'from-blue-500 to-blue-600',
   grok: 'from-zinc-700 to-zinc-900',
+  external_openai_compatible: 'from-teal-500 to-emerald-600',
   volcengine_coding: 'from-red-500 to-red-600',
   xunfei_coding: 'from-cyan-500 to-cyan-600',
 }
@@ -121,6 +130,7 @@ const GRADIENT_TEXT: Record<Platform, string> = {
   antigravity: 'text-purple-100',
   gemini: 'text-blue-100',
   grok: 'text-zinc-100',
+  external_openai_compatible: 'text-teal-100',
   volcengine_coding: 'text-red-100',
   xunfei_coding: 'text-cyan-100',
 }
@@ -132,6 +142,7 @@ const GRADIENT_SUBTEXT: Record<Platform, string> = {
   antigravity: 'text-purple-200',
   gemini: 'text-blue-200',
   grok: 'text-zinc-300',
+  external_openai_compatible: 'text-teal-100',
   volcengine_coding: 'text-red-200',
   xunfei_coding: 'text-cyan-200',
 }
@@ -140,7 +151,7 @@ const GRADIENT_SUBTEXT_DEFAULT = 'text-primary-200'
 // ── Public API ──────────────────────────────────────────────────────
 
 function isPlatform(p: string): p is Platform {
-  return p === 'anthropic' || p === 'openai' || p === 'antigravity' || p === 'gemini' || p === 'grok' || p === 'volcengine_coding' || p === 'xunfei_coding'
+  return p === 'anthropic' || p === 'openai' || p === 'antigravity' || p === 'gemini' || p === 'grok' || p === 'external_openai_compatible' || p === 'volcengine_coding' || p === 'xunfei_coding'
 }
 
 export function platformBadgeClass(p: string): string {
@@ -194,6 +205,7 @@ export function platformLabel(p: string): string {
     case 'antigravity': return 'Antigravity'
     case 'gemini': return 'Gemini'
     case 'grok': return 'Grok'
+    case 'external_openai_compatible': return 'OpenAI 兼容外部 API'
     case 'volcengine_coding': return '火山 Ark Coding'
     case 'xunfei_coding': return '讯飞 Coding/MaaS'
     default: return p || 'API'

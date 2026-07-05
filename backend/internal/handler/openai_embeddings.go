@@ -159,8 +159,10 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
 
+		requestPassthrough := account.IsExternalOpenAIRequestPassthroughEnabled(apiKey.Group)
+		service.MarkExternalOpenAIRequestPassthrough(c, requestPassthrough)
 		forwardBody := body
-		if channelMapping.Mapped {
+		if channelMapping.Mapped && !requestPassthrough {
 			forwardBody = h.gatewayService.ReplaceModelInBody(body, channelMapping.MappedModel)
 		}
 		writerSizeBeforeForward := c.Writer.Size()

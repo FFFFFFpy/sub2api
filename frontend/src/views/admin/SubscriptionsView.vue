@@ -990,8 +990,7 @@ const platformFilterOptions = computed(() => [
   { value: 'openai', label: 'OpenAI' },
   { value: 'gemini', label: 'Gemini' },
   { value: 'antigravity', label: 'Antigravity' },
-  { value: 'volcengine_coding', label: '火山 Ark Coding' },
-  { value: 'xunfei_coding', label: '讯飞 Coding/MaaS' }
+  { value: 'external_openai_compatible', label: 'OpenAI 兼容外部 API' }
 ])
 
 // Group options for assign (only subscription type groups)

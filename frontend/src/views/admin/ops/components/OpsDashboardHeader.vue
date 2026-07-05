@@ -113,8 +113,7 @@ const platformOptions = computed(() => [
   { value: 'gemini', label: 'Gemini' },
   { value: 'antigravity', label: 'Antigravity' },
   { value: 'grok', label: 'Grok' },
-  { value: 'volcengine_coding', label: '火山 Ark Coding' },
-  { value: 'xunfei_coding', label: '讯飞 Coding/MaaS' }
+  { value: 'external_openai_compatible', label: 'OpenAI 兼容外部 API' }
 ])
 
 const timeRangeOptions = computed(() => [

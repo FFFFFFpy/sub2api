@@ -900,8 +900,12 @@ func init() {
 	groupDescModelsListConfig := groupFields[34].Descriptor()
 	// group.DefaultModelsListConfig holds the default value on creation for the models_list_config field.
 	group.DefaultModelsListConfig = groupDescModelsListConfig.Default.(domain.GroupModelsListConfig)
+	// groupDescRequestPassthroughEnabled is the schema descriptor for request_passthrough_enabled field.
+	groupDescRequestPassthroughEnabled := groupFields[35].Descriptor()
+	// group.DefaultRequestPassthroughEnabled holds the default value on creation for the request_passthrough_enabled field.
+	group.DefaultRequestPassthroughEnabled = groupDescRequestPassthroughEnabled.Default.(bool)
 	// groupDescRpmLimit is the schema descriptor for rpm_limit field.
-	groupDescRpmLimit := groupFields[35].Descriptor()
+	groupDescRpmLimit := groupFields[36].Descriptor()
 	// group.DefaultRpmLimit holds the default value on creation for the rpm_limit field.
 	group.DefaultRpmLimit = groupDescRpmLimit.Default.(int)
 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()

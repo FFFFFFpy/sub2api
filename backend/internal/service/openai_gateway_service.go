@@ -1377,12 +1377,14 @@ func normalizeOpenAICompatiblePlatform(platform string) string {
 	switch platform {
 	case PlatformGrok:
 		return PlatformGrok
-	case PlatformVolcengineCoding:
-		return PlatformVolcengineCoding
-	case PlatformXunfeiCoding:
-		return PlatformXunfeiCoding
+	case PlatformExternalOpenAI, PlatformVolcengineCoding, PlatformXunfeiCoding:
+		return PlatformExternalOpenAI
 	}
 	return PlatformOpenAI
+}
+
+func NormalizeOpenAICompatiblePlatformForRouting(platform string) string {
+	return normalizeOpenAICompatiblePlatform(platform)
 }
 
 func noAvailableOpenAISelectionError(requestedModel string, compactBlocked bool) error {
@@ -1418,7 +1420,7 @@ func openAICompactSupportTier(account *Account) int {
 // 检查母账号凭据可用性；该检查未内置于本函数，以避免注入 DB 依赖。
 func isOpenAICompatibleAccountEligibleForRequest(ctx context.Context, account *Account, platform string, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability) bool {
 	platform = normalizeOpenAICompatiblePlatform(platform)
-	if account == nil || account.Platform != platform || !account.IsOpenAICompatible() || !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
+	if account == nil || normalizeOpenAICompatiblePlatform(account.Platform) != normalizeOpenAICompatiblePlatform(platform) || !account.IsOpenAICompatible() || !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
 		return false
 	}
 	if account.IsOpenAI() {
@@ -2638,7 +2640,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		return s.forwardGrokResponses(ctx, c, account, body, originalModel, reqStream, startTime)
 	}
 
-	if account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
+	if account.Type == AccountTypeAPIKey && !account.IsExternalOpenAICompatibleAPIKey() && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
 		return s.forwardResponsesViaRawChatCompletions(ctx, c, account, body)
 	}
 
@@ -2678,7 +2680,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 		return nil, errors.New("openai ws v1 is temporarily unsupported; use ws v2")
 	}
-	passthroughEnabled := account.IsOpenAIPassthroughEnabled()
+	passthroughEnabled := account.IsOpenAIPassthroughEnabled() || externalOpenAIRequestPassthroughEnabled(c, account)
 	if passthroughEnabled {
 		// 透传分支只需要轻量提取字段，避免热路径全量 Unmarshal。
 		reasoningEffort := extractOpenAIReasoningEffortFromBody(body, reqModel)

@@ -23,6 +23,7 @@ const (
 	PlatformGemini           = "gemini"
 	PlatformAntigravity      = "antigravity"
 	PlatformGrok             = "grok"
+	PlatformExternalOpenAI   = "external_openai_compatible"
 	PlatformVolcengineCoding = "volcengine_coding"
 	PlatformXunfeiCoding     = "xunfei_coding"
 )
