@@ -257,6 +257,7 @@ type CreateGroupInput struct {
 	RequirePrivacySet           bool
 	MessagesDispatchModelConfig OpenAIMessagesDispatchModelConfig
 	ModelsListConfig            GroupModelsListConfig
+	RequestPassthroughEnabled   bool
 	// RPMLimit 分组 RPM 上限（0 = 不限制）
 	RPMLimit int
 	// MaxReasoningEffort OpenAI/Codex 请求的推理强度上限，空字符串表示不限制。
@@ -265,8 +266,6 @@ type CreateGroupInput struct {
 	ReasoningEffortMappings []ReasoningEffortMapping
 	// 从指定分组复制账号（创建分组后在同一事务内绑定）
 	CopyAccountsFromGroupIDs []int64
-	// 绑定当前平台下尚未分组的账号。
-	BindUngroupedAccounts bool
 }
 
 type UpdateGroupInput struct {
@@ -319,6 +318,7 @@ type UpdateGroupInput struct {
 	RequirePrivacySet           *bool
 	MessagesDispatchModelConfig *OpenAIMessagesDispatchModelConfig
 	ModelsListConfig            *GroupModelsListConfig
+	RequestPassthroughEnabled   *bool
 	// RPMLimit 分组 RPM 上限（0 = 不限制），nil 表示未提供不改动。
 	RPMLimit *int
 	// MaxReasoningEffort 空字符串表示清除上限；nil 表示未提供不改动。
@@ -327,8 +327,6 @@ type UpdateGroupInput struct {
 	ReasoningEffortMappings *[]ReasoningEffortMapping
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64
-	// 绑定当前平台下尚未分组的账号。
-	BindUngroupedAccounts bool
 }
 
 type CreateAccountInput struct {

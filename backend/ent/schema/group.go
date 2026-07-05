@@ -216,6 +216,9 @@ func (Group) Fields() []ent.Field {
 			Default(domain.GroupModelsListConfig{}).
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
 			Comment("自定义 /v1/models 展示列表配置；仅影响模型列表响应，不影响调度"),
+		field.Bool("request_passthrough_enabled").
+			Default(false).
+			Comment("是否启用受控请求透传；仅外部 OpenAI-compatible 平台使用"),
 
 		// 分组级每分钟请求数上限（0 = 不限制）。设置后优先于用户级兜底生效。
 		field.Int("rpm_limit").

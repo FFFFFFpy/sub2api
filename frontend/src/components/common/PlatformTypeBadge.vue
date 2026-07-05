@@ -90,6 +90,7 @@ const platformLabel = computed(() => {
   if (props.platform === 'openai') return 'OpenAI'
   if (props.platform === 'antigravity') return 'Antigravity'
   if (props.platform === 'grok') return 'Grok'
+  if (props.platform === 'external_openai_compatible') return 'OpenAI 兼容外部 API'
   if (props.platform === 'volcengine_coding') return '火山 Ark Coding'
   if (props.platform === 'xunfei_coding') return '讯飞 Coding/MaaS'
   if (props.platform === 'gemini') return 'Gemini'
@@ -178,6 +179,9 @@ const platformClass = computed(() => {
   if (props.platform === 'grok') {
     return 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
   }
+  if (props.platform === 'external_openai_compatible') {
+    return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+  }
   if (props.platform === 'volcengine_coding') {
     return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
   }
@@ -199,6 +203,9 @@ const typeClass = computed(() => {
   }
   if (props.platform === 'grok') {
     return 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
+  }
+  if (props.platform === 'external_openai_compatible') {
+    return 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400'
   }
   if (props.platform === 'volcengine_coding') {
     return 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'

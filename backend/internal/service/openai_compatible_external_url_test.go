@@ -2,65 +2,78 @@ package service
 
 import "testing"
 
-func TestBuildVolcengineCodingURL(t *testing.T) {
+func TestBuildExternalOpenAICompatibleURL(t *testing.T) {
 	tests := []struct {
-		name     string
-		base     string
-		endpoint string
-		want     string
+		name             string
+		baseURL          string
+		endpointBaseURLs map[string]string
+		endpointPaths    map[string]string
+		endpoint         ExternalOpenAIEndpoint
+		incomingPath     string
+		want             string
 	}{
-		{"default chat", "", "/chat/completions", "https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions"},
-		{"default responses", "", "/responses", "https://ark.cn-beijing.volces.com/api/coding/v3/responses"},
-		{"default embeddings", "", "/embeddings", "https://ark.cn-beijing.volces.com/api/coding/v3/embeddings"},
-		{"default rerank", "", "/rerank", "https://ark.cn-beijing.volces.com/api/coding/v3/rerank"},
-		{"root chat", "https://ark.cn-beijing.volces.com", "/chat/completions", "https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions"},
-		{"versioned chat", "https://ark.cn-beijing.volces.com/api/coding/v3", "/chat/completions", "https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions"},
+		{
+			name:     "ark chat",
+			baseURL:  "https://ark.cn-beijing.volces.com/api/coding/v3",
+			endpoint: ExternalEndpointChatCompletions,
+			want:     "https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions",
+		},
+		{
+			name:     "ark responses",
+			baseURL:  "https://ark.cn-beijing.volces.com/api/coding/v3",
+			endpoint: ExternalEndpointResponses,
+			want:     "https://ark.cn-beijing.volces.com/api/coding/v3/responses",
+		},
+		{
+			name:     "ark embeddings",
+			baseURL:  "https://ark.cn-beijing.volces.com/api/coding/v3",
+			endpoint: ExternalEndpointEmbeddings,
+			want:     "https://ark.cn-beijing.volces.com/api/coding/v3/embeddings",
+		},
+		{
+			name:     "ark rerank",
+			baseURL:  "https://ark.cn-beijing.volces.com/api/coding/v3",
+			endpoint: ExternalEndpointRerank,
+			want:     "https://ark.cn-beijing.volces.com/api/coding/v3/rerank",
+		},
+		{
+			name:    "xunfei responses endpoint base override",
+			baseURL: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+			endpointBaseURLs: map[string]string{
+				"responses": "https://maas-coding-api.cn-huabei-1.xf-yun.com/v1",
+			},
+			endpoint: ExternalEndpointResponses,
+			want:     "https://maas-coding-api.cn-huabei-1.xf-yun.com/v1/responses",
+		},
+		{
+			name:    "xunfei maas embeddings endpoint base override",
+			baseURL: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+			endpointBaseURLs: map[string]string{
+				"embeddings": "https://maas-api.cn-huabei-1.xf-yun.com/v2",
+			},
+			endpoint: ExternalEndpointEmbeddings,
+			want:     "https://maas-api.cn-huabei-1.xf-yun.com/v2/embeddings",
+		},
+		{
+			name:     "custom endpoint path and incoming query",
+			baseURL:  "https://example.com/openai/v3/",
+			endpoint: ExternalEndpointRerank,
+			endpointPaths: map[string]string{
+				"rerank": "ranking/rerank?configured=1",
+			},
+			incomingPath: "/v1/rerank?trace=abc",
+			want:         "https://example.com/openai/v3/ranking/rerank?configured=1&trace=abc",
+		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := buildVolcengineCodingURL(tt.base, tt.endpoint); got != tt.want {
-				t.Fatalf("buildVolcengineCodingURL() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
 
-func TestBuildXunfeiCodingURL(t *testing.T) {
-	tests := []struct {
-		name          string
-		base          string
-		embeddingBase string
-		rerankBase    string
-		kind          string
-		want          string
-	}{
-		{"default chat", "", "", "", "chat", "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/chat/completions"},
-		{"default responses", "", "", "", "responses", "https://maas-coding-api.cn-huabei-1.xf-yun.com/v1/responses"},
-		{"default embeddings", "", "", "", "embeddings", "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/embeddings"},
-		{"default rerank", "", "", "", "rerank", "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/rerank"},
-		{"root chat", "https://maas-coding-api.cn-huabei-1.xf-yun.com", "", "", "chat", "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/chat/completions"},
-		{"versioned chat", "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2", "", "", "chat", "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/chat/completions"},
-		{"versioned responses fixed v1", "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2", "", "", "responses", "https://maas-coding-api.cn-huabei-1.xf-yun.com/v1/responses"},
-		{"versioned embeddings", "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2", "", "", "embeddings", "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/embeddings"},
-		{"versioned rerank", "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2", "", "", "rerank", "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/rerank"},
-		{"maas embedding base", "", "https://maas-api.cn-huabei-1.xf-yun.com/v2", "", "embeddings", "https://maas-api.cn-huabei-1.xf-yun.com/v2/embeddings"},
-		{"maas rerank base", "", "", "https://maas-api.cn-huabei-1.xf-yun.com/v2", "rerank", "https://maas-api.cn-huabei-1.xf-yun.com/v2/rerank"},
-	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var got string
-			switch tt.kind {
-			case "chat":
-				got = buildXunfeiCodingChatCompletionsURL(tt.base)
-			case "responses":
-				got = buildXunfeiCodingResponsesURL()
-			case "embeddings":
-				got = buildXunfeiCodingEmbeddingsURL(tt.base, tt.embeddingBase)
-			case "rerank":
-				got = buildXunfeiCodingRerankURL(tt.base, tt.embeddingBase, tt.rerankBase)
+			got, err := buildExternalOpenAICompatibleURL(tt.baseURL, tt.endpointBaseURLs, tt.endpointPaths, tt.endpoint, tt.incomingPath)
+			if err != nil {
+				t.Fatalf("buildExternalOpenAICompatibleURL() error = %v", err)
 			}
 			if got != tt.want {
-				t.Fatalf("xunfei URL = %q, want %q", got, tt.want)
+				t.Fatalf("buildExternalOpenAICompatibleURL() = %q, want %q", got, tt.want)
 			}
 		})
 	}

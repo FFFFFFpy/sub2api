@@ -46,8 +46,8 @@ func RegisterGatewayRoutes(
 	requireGroupGoogle := middleware.RequireGroupAssignment(settingService, middleware.GoogleErrorWriter)
 
 	isOpenAIResponsesCompatibleGatewayPlatform := func(c *gin.Context) bool {
-		switch getGroupPlatform(c) {
-		case service.PlatformOpenAI, service.PlatformGrok, service.PlatformVolcengineCoding, service.PlatformXunfeiCoding:
+		switch service.NormalizeOpenAICompatiblePlatformForRouting(getGroupPlatform(c)) {
+		case service.PlatformOpenAI, service.PlatformGrok, service.PlatformExternalOpenAI:
 			return true
 		default:
 			return false

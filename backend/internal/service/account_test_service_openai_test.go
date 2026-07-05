@@ -506,7 +506,7 @@ func TestAccountTestService_OpenAIAPIKeyResponsesUnsupportedUsesChatCompletionsP
 	require.NotContains(t, body, "当前测试接口仅支持 Responses API 路径")
 }
 
-func TestAccountTestService_CodingPlatformsUseChatCompletionsPath(t *testing.T) {
+func TestAccountTestService_ExternalOpenAICompatibleUsesChatCompletionsPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
@@ -517,10 +517,10 @@ func TestAccountTestService_CodingPlatformsUseChatCompletionsPath(t *testing.T) 
 		wantBody string
 	}{
 		{
-			name: "volcengine coding",
+			name: "ark preset",
 			account: &Account{
 				ID:       101,
-				Platform: PlatformVolcengineCoding,
+				Platform: PlatformExternalOpenAI,
 				Type:     AccountTypeAPIKey,
 				Credentials: map[string]any{
 					"api_key":  "ark-test",
@@ -532,10 +532,10 @@ func TestAccountTestService_CodingPlatformsUseChatCompletionsPath(t *testing.T) 
 			wantBody: "kimi-k2.7-code",
 		},
 		{
-			name: "xunfei coding",
+			name: "xunfei preset",
 			account: &Account{
 				ID:       102,
-				Platform: PlatformXunfeiCoding,
+				Platform: PlatformExternalOpenAI,
 				Type:     AccountTypeAPIKey,
 				Credentials: map[string]any{
 					"api_key":  "xf-test",
@@ -590,7 +590,7 @@ func TestAccountTestService_CodingPlatformsUseChatCompletionsPath(t *testing.T) 
 	}
 }
 
-func TestAccountTestService_XunfeiCodingEmbeddingAndRerankUseMatchingEndpoints(t *testing.T) {
+func TestAccountTestService_ExternalOpenAICompatibleEmbeddingAndRerankUseMatchingEndpoints(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
@@ -633,13 +633,15 @@ func TestAccountTestService_XunfeiCodingEmbeddingAndRerankUseMatchingEndpoints(t
 			ctx, recorder := newTestContext()
 			account := &Account{
 				ID:       103,
-				Platform: PlatformXunfeiCoding,
+				Platform: PlatformExternalOpenAI,
 				Type:     AccountTypeAPIKey,
 				Credentials: map[string]any{
-					"api_key":            "xf-test",
-					"base_url":           "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
-					"embedding_base_url": "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
-					"rerank_base_url":    "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+					"api_key":  "xf-test",
+					"base_url": "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+					"endpoint_base_urls": map[string]any{
+						"embeddings": "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+						"rerank":     "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+					},
 					"model_mapping": map[string]any{
 						"xopqwen36v35b":       "xopqwen36v35b",
 						"xop3qwen8bembedding": "xop3qwen8bembedding",

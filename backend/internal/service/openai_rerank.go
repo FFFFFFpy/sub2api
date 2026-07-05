@@ -34,8 +34,12 @@ func (s *OpenAIGatewayService) ForwardRerank(
 
 	billingModel := resolveOpenAIForwardModel(account, originalModel, defaultMappedModel)
 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
+	requestPassthrough := externalOpenAIRequestPassthroughEnabled(c, account)
+	if requestPassthrough {
+		upstreamModel = originalModel
+	}
 	upstreamBody := body
-	if upstreamModel != originalModel {
+	if !requestPassthrough && upstreamModel != originalModel {
 		upstreamBody = ReplaceModelInBody(body, upstreamModel)
 	}
 
@@ -45,6 +49,7 @@ func (s *OpenAIGatewayService) ForwardRerank(
 		zap.String("original_model", originalModel),
 		zap.String("billing_model", billingModel),
 		zap.String("upstream_model", upstreamModel),
+		zap.Bool("request_passthrough", requestPassthrough),
 	)
 
 	apiKey := account.GetOpenAIApiKey()
@@ -159,40 +164,10 @@ func (s *OpenAIGatewayService) ForwardRerank(
 }
 
 func (s *OpenAIGatewayService) rerankURL(account *Account) (string, error) {
-	switch account.Platform {
-	case PlatformVolcengineCoding:
-		baseURL := volcengineCodingBaseURL(account.GetCredential("base_url"))
-		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
-		if err != nil {
-			return "", fmt.Errorf("invalid base_url: %w", err)
-		}
-		return buildVolcengineCodingURL(validatedURL, "/rerank"), nil
-	case PlatformXunfeiCoding:
-		baseURL := xunfeiCodingBaseURL(account.GetCredential("base_url"))
-		validatedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
-		if err != nil {
-			return "", fmt.Errorf("invalid base_url: %w", err)
-		}
-		embeddingBase := strings.TrimSpace(account.GetCredential("embedding_base_url"))
-		rerankBase := strings.TrimSpace(account.GetCredential("rerank_base_url"))
-		if rerankBase != "" {
-			validatedRerankBase, err := s.validateUpstreamBaseURL(xunfeiCodingBaseURL(rerankBase))
-			if err != nil {
-				return "", fmt.Errorf("invalid rerank_base_url: %w", err)
-			}
-			return buildXunfeiCodingRerankURL("", "", validatedRerankBase), nil
-		}
-		if embeddingBase != "" {
-			validatedEmbeddingBase, err := s.validateUpstreamBaseURL(xunfeiCodingBaseURL(embeddingBase))
-			if err != nil {
-				return "", fmt.Errorf("invalid embedding_base_url: %w", err)
-			}
-			return buildXunfeiCodingRerankURL("", validatedEmbeddingBase, ""), nil
-		}
-		return buildXunfeiCodingRerankURL(validatedBaseURL, "", ""), nil
-	default:
-		return "", fmt.Errorf("rerank is not supported for platform %s", account.Platform)
+	if account.IsExternalOpenAICompatibleAPIKey() {
+		return s.externalOpenAICompatibleURL(account, ExternalEndpointRerank, "")
 	}
+	return "", fmt.Errorf("rerank is not supported for platform %s", account.Platform)
 }
 
 func writeOpenAIRerankUpstreamResponse(c *gin.Context, resp *http.Response, body []byte, filter *responseheaders.CompiledHeaderFilter) {

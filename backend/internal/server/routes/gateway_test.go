@@ -344,8 +344,8 @@ func TestGatewayRoutesOpenAICountTokensPathIsRegistered(t *testing.T) {
 	require.NotEqual(t, http.StatusNotFound, w.Code)
 }
 
-func TestGatewayRoutesCodingPlatformsAllowOpenAICompatibleEndpoints(t *testing.T) {
-	for _, platform := range []string{service.PlatformVolcengineCoding, service.PlatformXunfeiCoding} {
+func TestGatewayRoutesExternalOpenAICompatibleAllowsOpenAICompatibleEndpoints(t *testing.T) {
+	for _, platform := range []string{service.PlatformExternalOpenAI, service.PlatformVolcengineCoding, service.PlatformXunfeiCoding} {
 		t.Run(platform, func(t *testing.T) {
 			router := newGatewayRoutesTestRouter(platform)
 			for _, tc := range []struct {

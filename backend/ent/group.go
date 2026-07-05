@@ -115,6 +115,8 @@ type Group struct {
 	MessagesDispatchModelConfig domain.OpenAIMessagesDispatchModelConfig `json:"messages_dispatch_model_config,omitempty"`
 	// 自定义 /v1/models 展示列表配置；仅影响模型列表响应，不影响调度
 	ModelsListConfig domain.GroupModelsListConfig `json:"models_list_config,omitempty"`
+	// 是否启用受控请求透传；仅外部 OpenAI-compatible 平台使用
+	RequestPassthroughEnabled bool `json:"request_passthrough_enabled,omitempty"`
 	// 分组 RPM 上限，0 表示不限制；设置后接管该分组用户的限流
 	RpmLimit int `json:"rpm_limit,omitempty"`
 	// OpenAI reasoning effort 上限；可选 minimal/low/medium/high/xhigh/max
@@ -571,6 +573,12 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field models_list_config: %w", err)
 				}
 			}
+		case group.FieldRequestPassthroughEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field request_passthrough_enabled", values[i])
+			} else if value.Valid {
+				_m.RequestPassthroughEnabled = value.Bool
+			}
 		case group.FieldRpmLimit:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field rpm_limit", values[i])
@@ -840,6 +848,9 @@ func (_m *Group) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("models_list_config=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ModelsListConfig))
+	builder.WriteString(", ")
+	builder.WriteString("request_passthrough_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RequestPassthroughEnabled))
 	builder.WriteString(", ")
 	builder.WriteString("rpm_limit=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RpmLimit))
