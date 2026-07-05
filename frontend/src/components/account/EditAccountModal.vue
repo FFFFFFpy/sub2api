@@ -39,6 +39,10 @@
                 ? 'https://api.openai.com'
                 : account.platform === 'gemini'
                   ? 'https://generativelanguage.googleapis.com'
+                  : account.platform === 'volcengine_coding'
+                    ? 'https://ark.cn-beijing.volces.com/api/coding/v3'
+                    : account.platform === 'xunfei_coding'
+                      ? 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2'
                   : account.platform === 'antigravity'
                     ? 'https://cloudcode-pa.googleapis.com'
                     : account.platform === 'grok'
@@ -51,6 +55,24 @@
             v-if="account.platform === 'grok'"
             class="mt-2"
             @select="editBaseUrl = $event"
+          />
+        </div>
+        <div v-if="account.platform === 'xunfei_coding'">
+          <label class="input-label">Embedding Base URL</label>
+          <input
+            v-model="editXunfeiEmbeddingBaseUrl"
+            type="text"
+            class="input"
+            placeholder="https://maas-coding-api.cn-huabei-1.xf-yun.com/v2 或 https://maas-api.cn-huabei-1.xf-yun.com/v2"
+          />
+        </div>
+        <div v-if="account.platform === 'xunfei_coding'">
+          <label class="input-label">Rerank Base URL</label>
+          <input
+            v-model="editXunfeiRerankBaseUrl"
+            type="text"
+            class="input"
+            placeholder="https://maas-coding-api.cn-huabei-1.xf-yun.com/v2 或 https://maas-api.cn-huabei-1.xf-yun.com/v2"
           />
         </div>
         <div>
@@ -68,6 +90,8 @@
                 ? 'sk-proj-...'
                 : account.platform === 'gemini'
                   ? 'AIza...'
+                  : account.platform === 'volcengine_coding' || account.platform === 'xunfei_coding'
+                    ? 'YOUR_API_KEY'
                   : account.platform === 'antigravity'
                     ? 'sk-...'
                     : account.platform === 'grok'
@@ -2710,6 +2734,8 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
+const editXunfeiEmbeddingBaseUrl = ref('')
+const editXunfeiRerankBaseUrl = ref('')
 // Bedrock credentials
 const editBedrockAccessKeyId = ref('')
 const editBedrockSecretAccessKey = ref('')
@@ -3466,6 +3492,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
             ? 'https://api.x.ai/v1'
             : 'https://api.anthropic.com'
     editBaseUrl.value = (credentials.base_url as string) || platformDefaultUrl
+    editXunfeiEmbeddingBaseUrl.value = (credentials.embedding_base_url as string) || ''
+    editXunfeiRerankBaseUrl.value = (credentials.rerank_base_url as string) || ''
 
     // Load model mappings and detect mode
     loadModelRestrictionFromMapping(credentials.model_mapping as Record<string, unknown> | undefined)
@@ -4096,6 +4124,21 @@ const handleSubmit = async () => {
         } else {
           delete newCredentials.compact_model_mapping
         }
+      }
+      if (props.account.platform === 'xunfei_coding') {
+        if (editXunfeiEmbeddingBaseUrl.value.trim()) {
+          newCredentials.embedding_base_url = editXunfeiEmbeddingBaseUrl.value.trim()
+        } else {
+          delete newCredentials.embedding_base_url
+        }
+        if (editXunfeiRerankBaseUrl.value.trim()) {
+          newCredentials.rerank_base_url = editXunfeiRerankBaseUrl.value.trim()
+        } else {
+          delete newCredentials.rerank_base_url
+        }
+      } else {
+        delete newCredentials.embedding_base_url
+        delete newCredentials.rerank_base_url
       }
 
       // Add pool mode if enabled

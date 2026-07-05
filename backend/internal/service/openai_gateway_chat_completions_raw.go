@@ -231,6 +231,22 @@ func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, 
 		}
 		return targetURL, nil
 	}
+	if account.IsVolcengineCoding() {
+		baseURL := volcengineCodingBaseURL(account.GetCredential("base_url"))
+		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+		if err != nil {
+			return "", fmt.Errorf("invalid base_url: %w", err)
+		}
+		return buildVolcengineCodingURL(validatedURL, "/chat/completions"), nil
+	}
+	if account.IsXunfeiCoding() {
+		baseURL := xunfeiCodingBaseURL(account.GetCredential("base_url"))
+		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+		if err != nil {
+			return "", fmt.Errorf("invalid base_url: %w", err)
+		}
+		return buildXunfeiCodingChatCompletionsURL(validatedURL), nil
+	}
 
 	return s.openAIChatCompletionsTargetURL(account)
 }

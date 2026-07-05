@@ -160,6 +160,32 @@
             <PlatformIcon platform="grok" size="sm" />
             Grok
           </button>
+          <button
+            type="button"
+            @click="form.platform = 'volcengine_coding'"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'volcengine_coding'
+                ? 'bg-white text-red-600 shadow-sm dark:bg-dark-600 dark:text-red-400'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="volcengine_coding" size="sm" />
+            火山 Ark Coding
+          </button>
+          <button
+            type="button"
+            @click="form.platform = 'xunfei_coding'"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'xunfei_coding'
+                ? 'bg-white text-cyan-600 shadow-sm dark:bg-dark-600 dark:text-cyan-400'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="xunfei_coding" size="sm" />
+            讯飞 Coding/MaaS
+          </button>
         </div>
       </div>
 
@@ -406,6 +432,38 @@
             <div>
               <span class="block text-sm font-medium text-gray-900 dark:text-white">API Key</span>
               <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.responsesApi') }}</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Account Type Selection (Coding API-key platforms) -->
+      <div v-if="form.platform === 'volcengine_coding' || form.platform === 'xunfei_coding'">
+        <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
+        <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2" data-tour="account-form-type">
+          <button
+            type="button"
+            @click="accountCategory = 'apikey'"
+            :class="[
+              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
+              accountCategory === 'apikey'
+                ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20'
+                : 'border-gray-200 hover:border-cyan-300 dark:border-dark-600 dark:hover:border-cyan-700'
+            ]"
+          >
+            <div
+              :class="[
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                accountCategory === 'apikey'
+                  ? 'bg-cyan-500 text-white'
+                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+              ]"
+            >
+              <Icon name="key" size="sm" />
+            </div>
+            <div>
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">API Key</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">OpenAI-compatible</span>
             </div>
           </button>
         </div>
@@ -1121,6 +1179,24 @@
             v-if="form.platform === 'grok'"
             class="mt-2"
             @select="apiKeyBaseUrl = $event"
+          />
+        </div>
+        <div v-if="form.platform === 'xunfei_coding'">
+          <label class="input-label">Embedding Base URL</label>
+          <input
+            v-model="xunfeiEmbeddingBaseUrl"
+            type="text"
+            class="input"
+            placeholder="https://maas-coding-api.cn-huabei-1.xf-yun.com/v2 或 https://maas-api.cn-huabei-1.xf-yun.com/v2"
+          />
+        </div>
+        <div v-if="form.platform === 'xunfei_coding'">
+          <label class="input-label">Rerank Base URL</label>
+          <input
+            v-model="xunfeiRerankBaseUrl"
+            type="text"
+            class="input"
+            placeholder="https://maas-coding-api.cn-huabei-1.xf-yun.com/v2 或 https://maas-api.cn-huabei-1.xf-yun.com/v2"
           />
         </div>
         <div>
@@ -4147,6 +4223,10 @@ watch(
 watch(
   [accountCategory, addMethod, antigravityAccountType, () => form.platform],
   ([category, method, agType]) => {
+    if (form.platform === 'volcengine_coding' || form.platform === 'xunfei_coding') {
+      form.type = 'apikey'
+      return
+    }
     // Antigravity upstream 类型（实际创建为 apikey）
     if (form.platform === 'antigravity' && agType === 'upstream') {
       form.type = 'apikey'
@@ -4180,7 +4260,13 @@ watch(
           ? 'https://generativelanguage.googleapis.com'
           : newPlatform === 'grok'
             ? 'https://api.x.ai/v1'
-            : 'https://api.anthropic.com'
+            : newPlatform === 'volcengine_coding'
+              ? 'https://ark.cn-beijing.volces.com/api/coding/v3'
+              : newPlatform === 'xunfei_coding'
+                ? 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2'
+                : 'https://api.anthropic.com'
+    xunfeiEmbeddingBaseUrl.value = ''
+    xunfeiRerankBaseUrl.value = ''
     // Clear model-related settings
     allowedModels.value = []
     modelMappings.value = []
@@ -4206,6 +4292,11 @@ watch(
       modelRestrictionMode.value = 'mapping'
       form.concurrency = 1
       form.load_factor = null
+    }
+    if (newPlatform === 'volcengine_coding' || newPlatform === 'xunfei_coding') {
+      accountCategory.value = 'apikey'
+      addMethod.value = 'oauth'
+      modelRestrictionMode.value = 'mapping'
     }
     if (newPlatform !== 'gemini' && newPlatform !== 'anthropic' && accountCategory.value === 'service_account') {
       accountCategory.value = 'oauth-based'
@@ -5066,6 +5157,14 @@ const handleSubmit = async () => {
   }
   if (form.platform === 'gemini') {
     credentials.tier_id = geminiTierAIStudio.value
+  }
+  if (form.platform === 'xunfei_coding') {
+    if (xunfeiEmbeddingBaseUrl.value.trim()) {
+      credentials.embedding_base_url = xunfeiEmbeddingBaseUrl.value.trim()
+    }
+    if (xunfeiRerankBaseUrl.value.trim()) {
+      credentials.rerank_base_url = xunfeiRerankBaseUrl.value.trim()
+    }
   }
 
   // Add model mapping if configured（OpenAI 开启自动透传时不应用）

@@ -252,12 +252,20 @@ func (a *Account) IsGrok() bool {
 	return a.Platform == PlatformGrok
 }
 
+func (a *Account) IsVolcengineCoding() bool {
+	return a.Platform == PlatformVolcengineCoding
+}
+
+func (a *Account) IsXunfeiCoding() bool {
+	return a.Platform == PlatformXunfeiCoding
+}
+
 func (a *Account) IsGrokOAuth() bool {
 	return a.IsGrok() && a.Type == AccountTypeOAuth
 }
 
 func (a *Account) IsOpenAICompatible() bool {
-	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok)
+	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.Platform == PlatformVolcengineCoding || a.Platform == PlatformXunfeiCoding)
 }
 
 func (a *Account) GeminiOAuthType() string {
@@ -1252,7 +1260,7 @@ func (a *Account) IsOpenAIApiKey() bool {
 }
 
 func (a *Account) GetOpenAIBaseURL() string {
-	if !a.IsOpenAI() {
+	if !a.IsOpenAI() && !a.IsExternalOpenAICompatibleAPIKey() {
 		return ""
 	}
 	if a.Type == AccountTypeAPIKey {
@@ -1260,6 +1268,12 @@ func (a *Account) GetOpenAIBaseURL() string {
 		if baseURL != "" {
 			return baseURL
 		}
+	}
+	if a.IsVolcengineCoding() {
+		return DefaultVolcengineCodingBaseURL
+	}
+	if a.IsXunfeiCoding() {
+		return DefaultXunfeiCodingBaseURL
 	}
 	return "https://api.openai.com"
 }
@@ -1346,7 +1360,7 @@ func (a *Account) GetOpenAIIDToken() string {
 }
 
 func (a *Account) GetOpenAIApiKey() string {
-	if !a.IsOpenAIApiKey() {
+	if !a.IsOpenAIApiKey() && !a.IsExternalOpenAICompatibleAPIKey() {
 		return ""
 	}
 	return a.GetCredential("api_key")

@@ -266,6 +266,29 @@ func TestGroupHandlerEndpoints(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
+func TestGroupHandlerCreateAllowsCodingPlatforms(t *testing.T) {
+	router, adminSvc := setupAdminRouter()
+
+	for _, platform := range []string{"volcengine_coding", "xunfei_coding"} {
+		body, _ := json.Marshal(map[string]any{
+			"name":                    "group-" + platform,
+			"platform":                platform,
+			"subscription_type":       "standard",
+			"rate_multiplier":         1,
+			"bind_ungrouped_accounts": true,
+		})
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		require.NotEmpty(t, adminSvc.createdGroups)
+		created := adminSvc.createdGroups[len(adminSvc.createdGroups)-1]
+		require.Equal(t, platform, created.Platform)
+		require.True(t, created.BindUngroupedAccounts)
+	}
+}
+
 func TestProxyHandlerEndpoints(t *testing.T) {
 	router, _ := setupAdminRouter()
 
