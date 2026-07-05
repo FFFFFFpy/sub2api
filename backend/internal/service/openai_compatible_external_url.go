@@ -175,11 +175,18 @@ func (s *OpenAIGatewayService) externalOpenAICompatibleURL(account *Account, end
 	return validatedURL, nil
 }
 
-func (s *OpenAIGatewayService) externalOpenAICompatibleResponsesURL(account *Account) (string, bool, error) {
+func externalOpenAIIncomingPath(c *gin.Context) string {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return ""
+	}
+	return c.Request.URL.RequestURI()
+}
+
+func (s *OpenAIGatewayService) externalOpenAICompatibleResponsesURL(account *Account, incomingPath string) (string, bool, error) {
 	if account == nil || !account.IsExternalOpenAICompatibleAPIKey() {
 		return "", false, nil
 	}
-	targetURL, err := s.externalOpenAICompatibleURL(account, ExternalEndpointResponses, "")
+	targetURL, err := s.externalOpenAICompatibleURL(account, ExternalEndpointResponses, incomingPath)
 	return targetURL, true, err
 }
 

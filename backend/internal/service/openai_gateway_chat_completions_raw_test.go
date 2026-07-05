@@ -153,6 +153,97 @@ func TestForwardAsRawChatCompletions_PreservesDeepSeekReasoningContentNonStreami
 	require.Equal(t, "final answer", gjson.Get(rec.Body.String(), "choices.0.message.content").String())
 }
 
+func TestForwardAsRawChatCompletionsExternalOpenAICompatiblePreservesIncomingQuery(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"gpt-local","messages":[{"role":"user","content":"hello"}],"stream":false}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions?x=1", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid_external_chat_query"}},
+		Body:       io.NopCloser(strings.NewReader(`{"id":"chatcmpl_query","object":"chat.completion","model":"gpt-local","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1,"total_tokens":4}}`)),
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:          rawChatCompletionsTestConfig(),
+		httpUpstream: upstream,
+	}
+	account := &Account{
+		ID:       102,
+		Name:     "external-openai-compatible",
+		Platform: PlatformExternalOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key":  "sk-test",
+			"base_url": "https://external.example/openai/v3",
+		},
+	}
+
+	result, err := svc.forwardAsRawChatCompletions(context.Background(), c, account, body, "")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "https://external.example/openai/v3/chat/completions?x=1", upstream.lastReq.URL.String())
+	require.Equal(t, "Bearer sk-test", upstream.lastReq.Header.Get("Authorization"))
+}
+
+func TestForwardAsRawChatCompletionsExternalPassthroughAllowsMissingStreamUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"gpt-local","messages":[{"role":"user","content":"hello"}],"stream":true}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	MarkExternalOpenAIRequestPassthrough(c, true)
+
+	upstreamBody := strings.Join([]string{
+		`data: {"id":"chatcmpl_passthrough","object":"chat.completion.chunk","model":"gpt-local","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]}`,
+		"",
+		`data: {"id":"chatcmpl_passthrough","object":"chat.completion.chunk","model":"gpt-local","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_external_passthrough_no_usage"}},
+		Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:          rawChatCompletionsTestConfig(),
+		httpUpstream: upstream,
+	}
+	account := &Account{
+		ID:       103,
+		Name:     "external-openai-compatible-passthrough",
+		Platform: PlatformExternalOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key":                     "sk-test",
+			"base_url":                    "https://external.example/openai/v3",
+			"request_passthrough_enabled": true,
+			"model_mapping": map[string]any{
+				"gpt-local": "gpt-upstream",
+			},
+		},
+	}
+
+	result, err := svc.forwardAsRawChatCompletions(context.Background(), c, account, body, "")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 0, result.Usage.InputTokens)
+	require.Equal(t, 0, result.Usage.OutputTokens)
+	require.False(t, gjson.GetBytes(upstream.lastBody, "stream_options.include_usage").Exists())
+	require.Equal(t, "gpt-local", gjson.GetBytes(upstream.lastBody, "model").String())
+	require.Contains(t, rec.Body.String(), `"content":"ok"`)
+	require.Contains(t, rec.Body.String(), "data: [DONE]")
+}
+
 func TestForwardAsRawChatCompletions_PreservesDeepSeekReasoningContentStreaming(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

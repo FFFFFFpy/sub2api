@@ -37,6 +37,9 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	// api_keys: key length should be 128
 	requireColumn(t, tx, "api_keys", "key", "character varying", 128, false)
 
+	// groups: external OpenAI-compatible request passthrough switch
+	requireColumn(t, tx, "groups", "request_passthrough_enabled", "boolean", 0, false)
+
 	// redeem_codes: subscription fields
 	requireColumn(t, tx, "redeem_codes", "group_id", "bigint", 0, true)
 	requireColumn(t, tx, "redeem_codes", "validity_days", "integer", 0, false)

@@ -115,6 +115,8 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 		}
 		upstreamBody = updatedBody
 	}
+	// In external request passthrough mode the request body is intentionally left
+	// untouched. If the upstream stream omits usage, billing usage may remain 0.
 	if clientStream && !requestPassthrough {
 		var usageErr error
 		upstreamBody, usageErr = ensureOpenAIChatStreamUsage(upstreamBody)
@@ -141,7 +143,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 		return nil, fmt.Errorf("account %d missing %s credential", account.ID, tokenKind)
 	}
 
-	targetURL, err := s.rawChatCompletionsURL(account)
+	targetURL, err := s.rawChatCompletionsURL(account, externalOpenAIIncomingPath(c))
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +263,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	return s.bufferRawChatCompletions(c, resp, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
 }
 
-func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, error) {
+func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account, incomingPath string) (string, error) {
 	if account.Platform == PlatformGrok {
 		targetURL, err := xai.BuildChatCompletionsURL(account.GetGrokBaseURL())
 		if err != nil {
@@ -270,7 +272,7 @@ func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, 
 		return targetURL, nil
 	}
 	if account.IsExternalOpenAICompatibleAPIKey() {
-		return s.externalOpenAICompatibleURL(account, ExternalEndpointChatCompletions, "")
+		return s.externalOpenAICompatibleURL(account, ExternalEndpointChatCompletions, incomingPath)
 	}
 
 	baseURL := account.GetOpenAIBaseURL()

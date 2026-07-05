@@ -74,7 +74,7 @@ func TestForwardRerankExternalPassthroughPreservesRequestBody(t *testing.T) {
 	result, err := svc.ForwardRerank(context.Background(), c, account, body, "")
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Equal(t, "https://example.test/api/v3/rerank", upstream.lastReq.URL.String())
+	require.Equal(t, "https://example.test/api/v3/rerank?trace=abc", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer sk-test", upstream.lastReq.Header.Get("Authorization"))
 	require.JSONEq(t, string(body), string(upstream.lastBody))
 	require.Equal(t, "rerank-local", result.UpstreamModel)

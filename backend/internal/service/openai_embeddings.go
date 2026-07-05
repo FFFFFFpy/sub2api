@@ -59,7 +59,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 		err       error
 	)
 	if account.IsExternalOpenAICompatibleAPIKey() {
-		targetURL, err = s.externalOpenAICompatibleURL(account, ExternalEndpointEmbeddings, "")
+		targetURL, err = s.externalOpenAICompatibleURL(account, ExternalEndpointEmbeddings, externalOpenAIIncomingPath(c))
 		if err != nil {
 			return nil, fmt.Errorf("invalid external embeddings url: %w", err)
 		}

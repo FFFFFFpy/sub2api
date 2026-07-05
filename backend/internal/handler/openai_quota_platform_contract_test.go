@@ -41,6 +41,33 @@ func TestOpenAIRecordUsageInputsCarryQuotaPlatform(t *testing.T) {
 	}
 }
 
+func TestOpenAIChatCompletionsNoAccountClassificationUsesRequestPlatform(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filepath.Join(".", "openai_chat_completions.go"), nil, 0)
+	require.NoError(t, err)
+
+	var badCalls []token.Position
+	var requestPlatformCalls int
+	ast.Inspect(file, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok || !isIdentCall(call.Fun, "classifyNoAccountErrorFromGin") {
+			return true
+		}
+		if len(call.Args) < 6 {
+			return true
+		}
+		if ident, ok := call.Args[5].(*ast.Ident); ok && ident.Name == "requestPlatform" {
+			requestPlatformCalls++
+			return true
+		}
+		badCalls = append(badCalls, fset.Position(call.Lparen))
+		return true
+	})
+
+	require.Empty(t, badCalls, "ChatCompletions no-account classification must pass requestPlatform, not a hard-coded platform")
+	require.Equal(t, 2, requestPlatformCalls, "ChatCompletions has two no-account classification sites")
+}
+
 func isOpenAIRecordUsageInputLiteral(expr ast.Expr) bool {
 	selector, ok := expr.(*ast.SelectorExpr)
 	if !ok {
@@ -62,4 +89,9 @@ func compositeLiteralHasKey(literal *ast.CompositeLit, key string) bool {
 		}
 	}
 	return false
+}
+
+func isIdentCall(expr ast.Expr, name string) bool {
+	ident, ok := expr.(*ast.Ident)
+	return ok && ident.Name == name
 }

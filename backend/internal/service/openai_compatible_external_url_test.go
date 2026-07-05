@@ -64,6 +64,34 @@ func TestBuildExternalOpenAICompatibleURL(t *testing.T) {
 			incomingPath: "/v1/rerank?trace=abc",
 			want:         "https://example.com/openai/v3/ranking/rerank?configured=1&trace=abc",
 		},
+		{
+			name:         "chat incoming query",
+			baseURL:      "https://example.com/openai/v3",
+			endpoint:     ExternalEndpointChatCompletions,
+			incomingPath: "/v1/chat/completions?x=1",
+			want:         "https://example.com/openai/v3/chat/completions?x=1",
+		},
+		{
+			name:         "embeddings incoming query",
+			baseURL:      "https://example.com/openai/v3",
+			endpoint:     ExternalEndpointEmbeddings,
+			incomingPath: "/v1/embeddings?x=1",
+			want:         "https://example.com/openai/v3/embeddings?x=1",
+		},
+		{
+			name:         "responses incoming query",
+			baseURL:      "https://example.com/openai/v3",
+			endpoint:     ExternalEndpointResponses,
+			incomingPath: "/v1/responses?x=1",
+			want:         "https://example.com/openai/v3/responses?x=1",
+		},
+		{
+			name:         "rerank incoming query",
+			baseURL:      "https://example.com/openai/v3",
+			endpoint:     ExternalEndpointRerank,
+			incomingPath: "/v1/rerank?x=1",
+			want:         "https://example.com/openai/v3/rerank?x=1",
+		},
 	}
 
 	for _, tt := range tests {
