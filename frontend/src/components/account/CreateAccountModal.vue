@@ -162,29 +162,16 @@
           </button>
           <button
             type="button"
-            @click="form.platform = 'volcengine_coding'"
+            @click="form.platform = 'external_openai_compatible'"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
-              form.platform === 'volcengine_coding'
-                ? 'bg-white text-red-600 shadow-sm dark:bg-dark-600 dark:text-red-400'
+              form.platform === 'external_openai_compatible'
+                ? 'bg-white text-teal-700 shadow-sm dark:bg-dark-600 dark:text-teal-300'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
-            <PlatformIcon platform="volcengine_coding" size="sm" />
-            火山 Ark Coding
-          </button>
-          <button
-            type="button"
-            @click="form.platform = 'xunfei_coding'"
-            :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
-              form.platform === 'xunfei_coding'
-                ? 'bg-white text-cyan-600 shadow-sm dark:bg-dark-600 dark:text-cyan-400'
-                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
-            ]"
-          >
-            <PlatformIcon platform="xunfei_coding" size="sm" />
-            讯飞 Coding/MaaS
+            <PlatformIcon platform="external_openai_compatible" size="sm" />
+            OpenAI 兼容外部 API
           </button>
         </div>
       </div>
@@ -438,7 +425,7 @@
       </div>
 
       <!-- Account Type Selection (Coding API-key platforms) -->
-      <div v-if="form.platform === 'volcengine_coding' || form.platform === 'xunfei_coding'">
+      <div v-if="form.platform === 'external_openai_compatible'">
         <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
         <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2" data-tour="account-form-type">
           <button
@@ -1158,6 +1145,14 @@
 
       <!-- API Key input (only for apikey type, excluding Antigravity which has its own fields) -->
       <div v-if="form.type === 'apikey' && form.platform !== 'antigravity'" class="space-y-4">
+        <div v-if="form.platform === 'external_openai_compatible'">
+          <label class="input-label">Preset</label>
+          <select v-model="externalOpenAIPreset" class="input" @change="applyExternalOpenAIPreset">
+            <option value="custom">自定义 OpenAI-compatible</option>
+            <option value="ark">火山 Ark Coding</option>
+            <option value="xunfei">讯飞 Coding/MaaS</option>
+          </select>
+        </div>
         <div>
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input
@@ -1169,10 +1164,8 @@
                 ? 'https://api.openai.com'
                 : form.platform === 'gemini'
                   ? 'https://generativelanguage.googleapis.com'
-                  : form.platform === 'volcengine_coding'
-                    ? 'https://ark.cn-beijing.volces.com/api/coding/v3'
-                    : form.platform === 'xunfei_coding'
-                      ? 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2'
+                  : form.platform === 'external_openai_compatible'
+                    ? 'https://api.example.com/v1'
                       : 'https://api.anthropic.com'
             "
           />
@@ -1183,23 +1176,23 @@
             @select="apiKeyBaseUrl = $event"
           />
         </div>
-        <div v-if="form.platform === 'xunfei_coding'">
-          <label class="input-label">Embedding Base URL</label>
-          <input
-            v-model="xunfeiEmbeddingBaseUrl"
-            type="text"
-            class="input"
-            placeholder="https://maas-coding-api.cn-huabei-1.xf-yun.com/v2 或 https://maas-api.cn-huabei-1.xf-yun.com/v2"
-          />
-        </div>
-        <div v-if="form.platform === 'xunfei_coding'">
-          <label class="input-label">Rerank Base URL</label>
-          <input
-            v-model="xunfeiRerankBaseUrl"
-            type="text"
-            class="input"
-            placeholder="https://maas-coding-api.cn-huabei-1.xf-yun.com/v2 或 https://maas-api.cn-huabei-1.xf-yun.com/v2"
-          />
+        <div v-if="form.platform === 'external_openai_compatible'" class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+          <label class="flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input v-model="externalRequestPassthroughEnabled" type="checkbox" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+            Request Passthrough
+          </label>
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div v-for="endpoint in externalOpenAIEndpoints" :key="endpoint.key">
+              <label class="input-label">{{ endpoint.label }} Base URL</label>
+              <input v-model="externalEndpointBaseUrls[endpoint.key]" type="text" class="input" :placeholder="apiKeyBaseUrl || '默认使用 Base URL'" />
+            </div>
+          </div>
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div v-for="endpoint in externalOpenAIEndpoints" :key="endpoint.key">
+              <label class="input-label">{{ endpoint.label }} Path</label>
+              <input v-model="externalEndpointPaths[endpoint.key]" type="text" class="input" />
+            </div>
+          </div>
         </div>
         <div>
           <label class="input-label">{{ t('admin.accounts.apiKeyRequired') }}</label>
@@ -1213,7 +1206,7 @@
                 ? 'sk-proj-...'
                 : form.platform === 'gemini'
                   ? 'AIza...'
-                  : form.platform === 'volcengine_coding' || form.platform === 'xunfei_coding'
+                  : form.platform === 'external_openai_compatible'
                     ? 'YOUR_API_KEY'
                     : 'sk-ant-...'
             "
@@ -3677,8 +3670,7 @@ const baseUrlHint = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.openai.baseUrlHint')
   if (form.platform === 'gemini') return t('admin.accounts.gemini.baseUrlHint')
   if (form.platform === 'grok') return t('admin.accounts.grok.baseUrlHint')
-  if (form.platform === 'volcengine_coding') return '默认 https://ark.cn-beijing.volces.com/api/coding/v3；填写根域名时会自动补全 /api/coding/v3。'
-  if (form.platform === 'xunfei_coding') return '默认 https://maas-coding-api.cn-huabei-1.xf-yun.com/v2；Responses 固定使用 /v1/responses。'
+  if (form.platform === 'external_openai_compatible') return '填写上游默认 endpoint base URL；也可以用 preset 填充 endpoint 级覆盖。'
   return t('admin.accounts.baseUrlHint')
 })
 
@@ -3766,8 +3758,27 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
-const xunfeiEmbeddingBaseUrl = ref('')
-const xunfeiRerankBaseUrl = ref('')
+const externalOpenAIPreset = ref<'custom' | 'ark' | 'xunfei'>('custom')
+const externalRequestPassthroughEnabled = ref(false)
+const externalOpenAIEndpoints: { key: OpenAIEndpointCapability; label: string }[] = [
+  { key: 'chat_completions', label: 'Chat' },
+  { key: 'responses', label: 'Responses' },
+  { key: 'embeddings', label: 'Embeddings' },
+  { key: 'rerank', label: 'Rerank' }
+]
+const defaultExternalEndpointPaths = {
+  chat_completions: '/chat/completions',
+  responses: '/responses',
+  embeddings: '/embeddings',
+  rerank: '/rerank'
+} satisfies Record<OpenAIEndpointCapability, string>
+const externalEndpointBaseUrls = reactive<Record<OpenAIEndpointCapability, string>>({
+  chat_completions: '',
+  responses: '',
+  embeddings: '',
+  rerank: ''
+})
+const externalEndpointPaths = reactive<Record<OpenAIEndpointCapability, string>>({ ...defaultExternalEndpointPaths })
 
 const syncPreviewCredentials = computed(() => {
   if (!apiKeyValue.value) return undefined
@@ -3946,14 +3957,16 @@ const openAITextEndpointCapabilityLabel = computed(() => {
 })
 const openAIEndpointCapabilityOptions = computed<{ value: OpenAIEndpointCapability; label: string }[]>(() => [
   { value: 'chat_completions', label: openAITextEndpointCapabilityLabel.value },
-  { value: 'embeddings', label: t('admin.accounts.openai.capabilityEmbeddings') }
+  { value: 'responses', label: 'Responses' },
+  { value: 'embeddings', label: t('admin.accounts.openai.capabilityEmbeddings') },
+  { value: 'rerank', label: 'Rerank' }
 ])
 const openAITextGenerationCapabilityEnabled = computed(() =>
   openAIEndpointCapabilities.value.includes('chat_completions')
 )
 
 const normalizeOpenAIEndpointCapabilities = (values: OpenAIEndpointCapability[]) => {
-  const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'embeddings']
+  const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'responses', 'embeddings', 'rerank']
   const selected = allowed.filter((value) => values.includes(value))
   return selected.length > 0 ? selected : allowed
 }
@@ -3981,11 +3994,37 @@ const toggleOpenAIEndpointCapability = (capability: OpenAIEndpointCapability, ev
 
 const applyOpenAIEndpointCapabilities = (credentials: Record<string, unknown>) => {
   const capabilities = normalizeOpenAIEndpointCapabilities(openAIEndpointCapabilities.value)
-  if (capabilities.length === 2) {
+  if (capabilities.length === 4) {
+    delete credentials.capabilities
     delete credentials.openai_capabilities
     return
   }
-  credentials.openai_capabilities = capabilities
+  credentials.capabilities = capabilities
+  delete credentials.openai_capabilities
+}
+
+const resetExternalEndpointConfig = () => {
+  externalEndpointBaseUrls.chat_completions = ''
+  externalEndpointBaseUrls.responses = ''
+  externalEndpointBaseUrls.embeddings = ''
+  externalEndpointBaseUrls.rerank = ''
+  externalEndpointPaths.chat_completions = defaultExternalEndpointPaths.chat_completions
+  externalEndpointPaths.responses = defaultExternalEndpointPaths.responses
+  externalEndpointPaths.embeddings = defaultExternalEndpointPaths.embeddings
+  externalEndpointPaths.rerank = defaultExternalEndpointPaths.rerank
+}
+
+const applyExternalOpenAIPreset = () => {
+  resetExternalEndpointConfig()
+  openAIEndpointCapabilities.value = ['chat_completions', 'responses', 'embeddings', 'rerank']
+  if (externalOpenAIPreset.value === 'ark') {
+    apiKeyBaseUrl.value = 'https://ark.cn-beijing.volces.com/api/coding/v3'
+  } else if (externalOpenAIPreset.value === 'xunfei') {
+    apiKeyBaseUrl.value = 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2'
+    externalEndpointBaseUrls.responses = 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v1'
+    externalEndpointBaseUrls.embeddings = 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2'
+    externalEndpointBaseUrls.rerank = 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2'
+  }
 }
 
 function buildAntigravityExtra(): Record<string, unknown> | undefined {
@@ -4228,7 +4267,7 @@ watch(
 watch(
   [accountCategory, addMethod, antigravityAccountType, () => form.platform],
   ([category, method, agType]) => {
-    if (form.platform === 'volcengine_coding' || form.platform === 'xunfei_coding') {
+    if (form.platform === 'external_openai_compatible') {
       form.type = 'apikey'
       return
     }
@@ -4265,13 +4304,12 @@ watch(
           ? 'https://generativelanguage.googleapis.com'
           : newPlatform === 'grok'
             ? 'https://api.x.ai/v1'
-            : newPlatform === 'volcengine_coding'
-              ? 'https://ark.cn-beijing.volces.com/api/coding/v3'
-              : newPlatform === 'xunfei_coding'
-                ? 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2'
+            : newPlatform === 'external_openai_compatible'
+              ? ''
                 : 'https://api.anthropic.com'
-    xunfeiEmbeddingBaseUrl.value = ''
-    xunfeiRerankBaseUrl.value = ''
+    externalOpenAIPreset.value = 'custom'
+    externalRequestPassthroughEnabled.value = false
+    resetExternalEndpointConfig()
     // Clear model-related settings
     allowedModels.value = []
     modelMappings.value = []
@@ -4298,10 +4336,11 @@ watch(
       form.concurrency = 1
       form.load_factor = null
     }
-    if (newPlatform === 'volcengine_coding' || newPlatform === 'xunfei_coding') {
+    if (newPlatform === 'external_openai_compatible') {
       accountCategory.value = 'apikey'
       addMethod.value = 'oauth'
       modelRestrictionMode.value = 'mapping'
+      openAIEndpointCapabilities.value = ['chat_completions', 'responses']
     }
     if (newPlatform !== 'gemini' && newPlatform !== 'anthropic' && accountCategory.value === 'service_account') {
       accountCategory.value = 'oauth-based'
@@ -4719,8 +4758,9 @@ const resetForm = () => {
   addMethod.value = 'oauth'
   apiKeyBaseUrl.value = 'https://api.anthropic.com'
   apiKeyValue.value = ''
-  xunfeiEmbeddingBaseUrl.value = ''
-  xunfeiRerankBaseUrl.value = ''
+  externalOpenAIPreset.value = 'custom'
+  externalRequestPassthroughEnabled.value = false
+  resetExternalEndpointConfig()
   editQuotaLimit.value = null
   editQuotaDailyLimit.value = null
   editQuotaWeeklyLimit.value = null
@@ -5152,10 +5192,8 @@ const handleSubmit = async () => {
       ? 'https://api.openai.com'
       : form.platform === 'gemini'
         ? 'https://generativelanguage.googleapis.com'
-        : form.platform === 'volcengine_coding'
-          ? 'https://ark.cn-beijing.volces.com/api/coding/v3'
-          : form.platform === 'xunfei_coding'
-            ? 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2'
+        : form.platform === 'external_openai_compatible'
+          ? ''
             : 'https://api.anthropic.com'
 
   // Build credentials with optional model mapping
@@ -5166,13 +5204,21 @@ const handleSubmit = async () => {
   if (form.platform === 'gemini') {
     credentials.tier_id = geminiTierAIStudio.value
   }
-  if (form.platform === 'xunfei_coding') {
-    if (xunfeiEmbeddingBaseUrl.value.trim()) {
-      credentials.embedding_base_url = xunfeiEmbeddingBaseUrl.value.trim()
-    }
-    if (xunfeiRerankBaseUrl.value.trim()) {
-      credentials.rerank_base_url = xunfeiRerankBaseUrl.value.trim()
-    }
+  if (form.platform === 'external_openai_compatible') {
+    credentials.request_passthrough_enabled = externalRequestPassthroughEnabled.value
+    const endpointBaseUrls = Object.fromEntries(
+      externalOpenAIEndpoints
+        .map((endpoint) => [endpoint.key, externalEndpointBaseUrls[endpoint.key].trim()])
+        .filter(([, value]) => value)
+    )
+    const endpointPaths = Object.fromEntries(
+      externalOpenAIEndpoints
+        .map((endpoint) => [endpoint.key, externalEndpointPaths[endpoint.key].trim()])
+        .filter(([, value]) => value)
+    )
+    if (Object.keys(endpointBaseUrls).length > 0) credentials.endpoint_base_urls = endpointBaseUrls
+    if (Object.keys(endpointPaths).length > 0) credentials.endpoint_paths = endpointPaths
+    applyOpenAIEndpointCapabilities(credentials)
   }
 
   // Add model mapping if configured（OpenAI 开启自动透传时不应用）

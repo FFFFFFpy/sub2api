@@ -207,8 +207,7 @@ func groupFromServiceBase(g *service.Group) Group {
 		RequireOAuthOnly:                g.RequireOAuthOnly,
 		RequirePrivacySet:               g.RequirePrivacySet,
 		RPMLimit:                        g.RPMLimit,
-		MaxReasoningEffort:              g.MaxReasoningEffort,
-		ReasoningEffortMappings:         g.ReasoningEffortMappings,
+		RequestPassthroughEnabled:       g.RequestPassthroughEnabled,
 		CreatedAt:                       g.CreatedAt,
 		UpdatedAt:                       g.UpdatedAt,
 	}

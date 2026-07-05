@@ -46,8 +46,8 @@ func RegisterGatewayRoutes(
 	requireGroupGoogle := middleware.RequireGroupAssignment(settingService, middleware.GoogleErrorWriter)
 
 	isOpenAIResponsesCompatibleGatewayPlatform := func(c *gin.Context) bool {
-		switch getGroupPlatform(c) {
-		case service.PlatformOpenAI, service.PlatformGrok, service.PlatformVolcengineCoding, service.PlatformXunfeiCoding:
+		switch service.NormalizeOpenAICompatiblePlatformForRouting(getGroupPlatform(c)) {
+		case service.PlatformOpenAI, service.PlatformGrok, service.PlatformExternalOpenAI:
 			return true
 		default:
 			return false
@@ -57,20 +57,15 @@ func RegisterGatewayRoutes(
 		return getGroupPlatform(c) == service.PlatformOpenAI
 	}
 	isEmbeddingsGatewayPlatform := func(c *gin.Context) bool {
-		switch getGroupPlatform(c) {
-		case service.PlatformOpenAI, service.PlatformVolcengineCoding, service.PlatformXunfeiCoding:
+		switch service.NormalizeOpenAICompatiblePlatformForRouting(getGroupPlatform(c)) {
+		case service.PlatformOpenAI, service.PlatformExternalOpenAI:
 			return true
 		default:
 			return false
 		}
 	}
 	isRerankGatewayPlatform := func(c *gin.Context) bool {
-		switch getGroupPlatform(c) {
-		case service.PlatformVolcengineCoding, service.PlatformXunfeiCoding:
-			return true
-		default:
-			return false
-		}
+		return service.NormalizeOpenAICompatiblePlatformForRouting(getGroupPlatform(c)) == service.PlatformExternalOpenAI
 	}
 	rerankHandler := func(c *gin.Context) {
 		if isRerankGatewayPlatform(c) {

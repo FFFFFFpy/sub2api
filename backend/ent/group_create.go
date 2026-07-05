@@ -677,6 +677,20 @@ func (_c *GroupCreate) SetNillableModelsListConfig(v *domain.GroupModelsListConf
 	return _c
 }
 
+// SetRequestPassthroughEnabled sets the "request_passthrough_enabled" field.
+func (_c *GroupCreate) SetRequestPassthroughEnabled(v bool) *GroupCreate {
+	_c.mutation.SetRequestPassthroughEnabled(v)
+	return _c
+}
+
+// SetNillableRequestPassthroughEnabled sets the "request_passthrough_enabled" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableRequestPassthroughEnabled(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetRequestPassthroughEnabled(*v)
+	}
+	return _c
+}
+
 // SetRpmLimit sets the "rpm_limit" field.
 func (_c *GroupCreate) SetRpmLimit(v int) *GroupCreate {
 	_c.mutation.SetRpmLimit(v)
@@ -968,6 +982,10 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultModelsListConfig
 		_c.mutation.SetModelsListConfig(v)
 	}
+	if _, ok := _c.mutation.RequestPassthroughEnabled(); !ok {
+		v := group.DefaultRequestPassthroughEnabled
+		_c.mutation.SetRequestPassthroughEnabled(v)
+	}
 	if _, ok := _c.mutation.RpmLimit(); !ok {
 		v := group.DefaultRpmLimit
 		_c.mutation.SetRpmLimit(v)
@@ -1120,6 +1138,9 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.ModelsListConfig(); !ok {
 		return &ValidationError{Name: "models_list_config", err: errors.New(`ent: missing required field "Group.models_list_config"`)}
+	}
+	if _, ok := _c.mutation.RequestPassthroughEnabled(); !ok {
+		return &ValidationError{Name: "request_passthrough_enabled", err: errors.New(`ent: missing required field "Group.request_passthrough_enabled"`)}
 	}
 	if _, ok := _c.mutation.RpmLimit(); !ok {
 		return &ValidationError{Name: "rpm_limit", err: errors.New(`ent: missing required field "Group.rpm_limit"`)}
@@ -1353,6 +1374,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ModelsListConfig(); ok {
 		_spec.SetField(group.FieldModelsListConfig, field.TypeJSON, value)
 		_node.ModelsListConfig = value
+	}
+	if value, ok := _c.mutation.RequestPassthroughEnabled(); ok {
+		_spec.SetField(group.FieldRequestPassthroughEnabled, field.TypeBool, value)
+		_node.RequestPassthroughEnabled = value
 	}
 	if value, ok := _c.mutation.RpmLimit(); ok {
 		_spec.SetField(group.FieldRpmLimit, field.TypeInt, value)
@@ -2281,6 +2306,18 @@ func (u *GroupUpsert) SetModelsListConfig(v domain.GroupModelsListConfig) *Group
 // UpdateModelsListConfig sets the "models_list_config" field to the value that was provided on create.
 func (u *GroupUpsert) UpdateModelsListConfig() *GroupUpsert {
 	u.SetExcluded(group.FieldModelsListConfig)
+	return u
+}
+
+// SetRequestPassthroughEnabled sets the "request_passthrough_enabled" field.
+func (u *GroupUpsert) SetRequestPassthroughEnabled(v bool) *GroupUpsert {
+	u.Set(group.FieldRequestPassthroughEnabled, v)
+	return u
+}
+
+// UpdateRequestPassthroughEnabled sets the "request_passthrough_enabled" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateRequestPassthroughEnabled() *GroupUpsert {
+	u.SetExcluded(group.FieldRequestPassthroughEnabled)
 	return u
 }
 
@@ -3260,6 +3297,20 @@ func (u *GroupUpsertOne) SetModelsListConfig(v domain.GroupModelsListConfig) *Gr
 func (u *GroupUpsertOne) UpdateModelsListConfig() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateModelsListConfig()
+	})
+}
+
+// SetRequestPassthroughEnabled sets the "request_passthrough_enabled" field.
+func (u *GroupUpsertOne) SetRequestPassthroughEnabled(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetRequestPassthroughEnabled(v)
+	})
+}
+
+// UpdateRequestPassthroughEnabled sets the "request_passthrough_enabled" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateRequestPassthroughEnabled() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateRequestPassthroughEnabled()
 	})
 }
 
@@ -4412,6 +4463,20 @@ func (u *GroupUpsertBulk) SetModelsListConfig(v domain.GroupModelsListConfig) *G
 func (u *GroupUpsertBulk) UpdateModelsListConfig() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateModelsListConfig()
+	})
+}
+
+// SetRequestPassthroughEnabled sets the "request_passthrough_enabled" field.
+func (u *GroupUpsertBulk) SetRequestPassthroughEnabled(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetRequestPassthroughEnabled(v)
+	})
+}
+
+// UpdateRequestPassthroughEnabled sets the "request_passthrough_enabled" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateRequestPassthroughEnabled() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateRequestPassthroughEnabled()
 	})
 }
 

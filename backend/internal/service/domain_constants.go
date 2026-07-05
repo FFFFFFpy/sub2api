@@ -43,6 +43,7 @@ const (
 	PlatformGemini           = domain.PlatformGemini
 	PlatformAntigravity      = domain.PlatformAntigravity
 	PlatformGrok             = domain.PlatformGrok
+	PlatformExternalOpenAI   = domain.PlatformExternalOpenAI
 	PlatformVolcengineCoding = domain.PlatformVolcengineCoding
 	PlatformXunfeiCoding     = domain.PlatformXunfeiCoding
 )

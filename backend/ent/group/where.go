@@ -275,6 +275,11 @@ func DefaultMappedModel(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldDefaultMappedModel, v))
 }
 
+// RequestPassthroughEnabled applies equality check predicate on the "request_passthrough_enabled" field. It's identical to RequestPassthroughEnabledEQ.
+func RequestPassthroughEnabled(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldRequestPassthroughEnabled, v))
+}
+
 // RpmLimit applies equality check predicate on the "rpm_limit" field. It's identical to RpmLimitEQ.
 func RpmLimit(v int) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldRpmLimit, v))
@@ -2068,6 +2073,16 @@ func DefaultMappedModelEqualFold(v string) predicate.Group {
 // DefaultMappedModelContainsFold applies the ContainsFold predicate on the "default_mapped_model" field.
 func DefaultMappedModelContainsFold(v string) predicate.Group {
 	return predicate.Group(sql.FieldContainsFold(FieldDefaultMappedModel, v))
+}
+
+// RequestPassthroughEnabledEQ applies the EQ predicate on the "request_passthrough_enabled" field.
+func RequestPassthroughEnabledEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldRequestPassthroughEnabled, v))
+}
+
+// RequestPassthroughEnabledNEQ applies the NEQ predicate on the "request_passthrough_enabled" field.
+func RequestPassthroughEnabledNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldRequestPassthroughEnabled, v))
 }
 
 // RpmLimitEQ applies the EQ predicate on the "rpm_limit" field.

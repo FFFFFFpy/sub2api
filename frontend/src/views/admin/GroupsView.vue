@@ -582,19 +582,19 @@
           </select>
           <p class="input-hint">{{ t("admin.groups.copyAccounts.hint") }}</p>
         </div>
-        <div>
+        <div v-if="isExternalOpenAICompatibleGroupPlatform(createForm.platform)">
           <label class="flex cursor-pointer items-start gap-2">
             <input
-              v-model="createForm.bind_ungrouped_accounts"
+              v-model="createForm.request_passthrough_enabled"
               type="checkbox"
               class="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
             />
             <span>
               <span class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ t("admin.groups.bindUngrouped.title") }}
+                请求透传
               </span>
               <span class="block text-xs text-gray-500 dark:text-gray-400">
-                {{ t("admin.groups.bindUngrouped.hint") }}
+                保留原始请求模型和参数，不应用分组模型映射。
               </span>
             </span>
           </label>
@@ -2120,19 +2120,19 @@
             {{ t("admin.groups.copyAccounts.hintEdit") }}
           </p>
         </div>
-        <div>
+        <div v-if="isExternalOpenAICompatibleGroupPlatform(editForm.platform)">
           <label class="flex cursor-pointer items-start gap-2">
             <input
-              v-model="editForm.bind_ungrouped_accounts"
+              v-model="editForm.request_passthrough_enabled"
               type="checkbox"
               class="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
             />
             <span>
               <span class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ t("admin.groups.bindUngrouped.title") }}
+                请求透传
               </span>
               <span class="block text-xs text-gray-500 dark:text-gray-400">
-                {{ t("admin.groups.bindUngrouped.hintEdit") }}
+                保留原始请求模型和参数，不应用分组模型映射。
               </span>
             </span>
           </label>
@@ -4250,8 +4250,7 @@ const platformOptions = computed(() => [
   { value: "gemini", label: "Gemini" },
   { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
-  { value: "volcengine_coding", label: "火山 Ark Coding" },
-  { value: "xunfei_coding", label: "讯飞 Coding/MaaS" },
+  { value: "external_openai_compatible", label: "OpenAI 兼容外部 API" },
 ]);
 
 const platformFilterOptions = computed(() => [
@@ -4261,9 +4260,13 @@ const platformFilterOptions = computed(() => [
   { value: "gemini", label: "Gemini" },
   { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
-  { value: "volcengine_coding", label: "火山 Ark Coding" },
-  { value: "xunfei_coding", label: "讯飞 Coding/MaaS" },
+  { value: "external_openai_compatible", label: "OpenAI 兼容外部 API" },
 ]);
+
+const isExternalOpenAICompatibleGroupPlatform = (platform: GroupPlatform | string) =>
+  platform === "external_openai_compatible" ||
+  platform === "volcengine_coding" ||
+  platform === "xunfei_coding";
 
 const editStatusOptions = computed(() => [
   { value: "active", label: t("admin.accounts.status.active") },
@@ -4547,7 +4550,7 @@ const createForm = reactive({
   mcp_xml_inject: true,
   // 从分组复制账号
   copy_accounts_from_group_ids: [] as number[],
-  bind_ungrouped_accounts: false,
+  request_passthrough_enabled: false,
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
   max_reasoning_effort: "",
@@ -4898,7 +4901,7 @@ const editForm = reactive({
   mcp_xml_inject: true,
   // 从分组复制账号
   copy_accounts_from_group_ids: [] as number[],
-  bind_ungrouped_accounts: false,
+  request_passthrough_enabled: false,
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
   max_reasoning_effort: "",
@@ -5291,7 +5294,7 @@ const closeCreateModal = () => {
   createForm.supported_model_scopes = ["claude", "gemini_text", "gemini_image"];
   createForm.mcp_xml_inject = true;
   createForm.copy_accounts_from_group_ids = [];
-  createForm.bind_ungrouped_accounts = false;
+  createForm.request_passthrough_enabled = false;
   createForm.rpm_limit = 0;
   createForm.max_reasoning_effort = "";
   createForm.reasoning_effort_mappings = [];
@@ -5489,7 +5492,7 @@ const handleEdit = async (group: AdminGroup) => {
   ];
   editForm.mcp_xml_inject = group.mcp_xml_inject ?? true;
   editForm.copy_accounts_from_group_ids = []; // 复制账号字段每次编辑时重置为空
-  editForm.bind_ungrouped_accounts = false;
+  editForm.request_passthrough_enabled = group.request_passthrough_enabled ?? false;
   editForm.rpm_limit = group.rpm_limit ?? 0;
   editForm.max_reasoning_effort = normalizeReasoningEffortForPlatform(
     group.platform,
@@ -5520,7 +5523,7 @@ const closeEditModal = () => {
   editReasoningEffortPolicyRef.value?.resetValidation();
   editModelRoutingRules.value = [];
   editForm.copy_accounts_from_group_ids = [];
-  editForm.bind_ungrouped_accounts = false;
+  editForm.request_passthrough_enabled = false;
   editForm.peak_rate_enabled = false;
   editForm.peak_start = "";
   editForm.peak_end = "";

@@ -39,10 +39,8 @@
                 ? 'https://api.openai.com'
                 : account.platform === 'gemini'
                   ? 'https://generativelanguage.googleapis.com'
-                  : account.platform === 'volcengine_coding'
-                    ? 'https://ark.cn-beijing.volces.com/api/coding/v3'
-                    : account.platform === 'xunfei_coding'
-                      ? 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2'
+                  : account.platform === 'external_openai_compatible'
+                    ? 'https://api.example.com/v1'
                   : account.platform === 'antigravity'
                     ? 'https://cloudcode-pa.googleapis.com'
                     : account.platform === 'grok'
@@ -57,23 +55,23 @@
             @select="editBaseUrl = $event"
           />
         </div>
-        <div v-if="account.platform === 'xunfei_coding'">
-          <label class="input-label">Embedding Base URL</label>
-          <input
-            v-model="editXunfeiEmbeddingBaseUrl"
-            type="text"
-            class="input"
-            placeholder="https://maas-coding-api.cn-huabei-1.xf-yun.com/v2 或 https://maas-api.cn-huabei-1.xf-yun.com/v2"
-          />
-        </div>
-        <div v-if="account.platform === 'xunfei_coding'">
-          <label class="input-label">Rerank Base URL</label>
-          <input
-            v-model="editXunfeiRerankBaseUrl"
-            type="text"
-            class="input"
-            placeholder="https://maas-coding-api.cn-huabei-1.xf-yun.com/v2 或 https://maas-api.cn-huabei-1.xf-yun.com/v2"
-          />
+        <div v-if="account.platform === 'external_openai_compatible' || account.platform === 'volcengine_coding' || account.platform === 'xunfei_coding'" class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+          <label class="flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input v-model="externalRequestPassthroughEnabled" type="checkbox" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+            Request Passthrough
+          </label>
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div v-for="endpoint in externalOpenAIEndpoints" :key="endpoint.key">
+              <label class="input-label">{{ endpoint.label }} Base URL</label>
+              <input v-model="externalEndpointBaseUrls[endpoint.key]" type="text" class="input" :placeholder="editBaseUrl || '默认使用 Base URL'" />
+            </div>
+          </div>
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div v-for="endpoint in externalOpenAIEndpoints" :key="endpoint.key">
+              <label class="input-label">{{ endpoint.label }} Path</label>
+              <input v-model="externalEndpointPaths[endpoint.key]" type="text" class="input" />
+            </div>
+          </div>
         </div>
         <div>
           <label class="input-label">{{ t('admin.accounts.apiKey') }}</label>
@@ -90,7 +88,7 @@
                 ? 'sk-proj-...'
                 : account.platform === 'gemini'
                   ? 'AIza...'
-                  : account.platform === 'volcengine_coding' || account.platform === 'xunfei_coding'
+                  : account.platform === 'external_openai_compatible' || account.platform === 'volcengine_coding' || account.platform === 'xunfei_coding'
                     ? 'YOUR_API_KEY'
                   : account.platform === 'antigravity'
                     ? 'sk-...'
@@ -2710,8 +2708,7 @@ const baseUrlHint = computed(() => {
   if (!props.account) return t('admin.accounts.baseUrlHint')
   if (props.account.platform === 'openai') return t('admin.accounts.openai.baseUrlHint')
   if (props.account.platform === 'gemini') return t('admin.accounts.gemini.baseUrlHint')
-  if (props.account.platform === 'volcengine_coding') return '默认 https://ark.cn-beijing.volces.com/api/coding/v3；填写根域名时会自动补全 /api/coding/v3。'
-  if (props.account.platform === 'xunfei_coding') return '默认 https://maas-coding-api.cn-huabei-1.xf-yun.com/v2；Responses 固定使用 /v1/responses。'
+  if (isExternalOpenAICompatiblePlatform(props.account.platform)) return '填写上游默认 endpoint base URL；可为 Chat、Responses、Embeddings、Rerank 单独覆盖 Base URL 和 Path。'
   return t('admin.accounts.baseUrlHint')
 })
 
@@ -2735,8 +2732,37 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
-const editXunfeiEmbeddingBaseUrl = ref('')
-const editXunfeiRerankBaseUrl = ref('')
+const externalRequestPassthroughEnabled = ref(false)
+const externalOpenAIEndpoints: { key: OpenAIEndpointCapability; label: string }[] = [
+  { key: 'chat_completions', label: 'Chat' },
+  { key: 'responses', label: 'Responses' },
+  { key: 'embeddings', label: 'Embeddings' },
+  { key: 'rerank', label: 'Rerank' }
+]
+const defaultExternalEndpointPaths = {
+  chat_completions: '/chat/completions',
+  responses: '/responses',
+  embeddings: '/embeddings',
+  rerank: '/rerank'
+} satisfies Record<OpenAIEndpointCapability, string>
+const externalEndpointBaseUrls = reactive<Record<OpenAIEndpointCapability, string>>({
+  chat_completions: '',
+  responses: '',
+  embeddings: '',
+  rerank: ''
+})
+const externalEndpointPaths = reactive<Record<OpenAIEndpointCapability, string>>({ ...defaultExternalEndpointPaths })
+const isExternalOpenAICompatiblePlatform = (platform?: string) =>
+  platform === 'external_openai_compatible' ||
+  platform === 'volcengine_coding' ||
+  platform === 'xunfei_coding'
+const resetExternalEndpointConfig = () => {
+  externalRequestPassthroughEnabled.value = false
+  for (const endpoint of externalOpenAIEndpoints) {
+    externalEndpointBaseUrls[endpoint.key] = ''
+    externalEndpointPaths[endpoint.key] = defaultExternalEndpointPaths[endpoint.key]
+  }
+}
 // Bedrock credentials
 const editBedrockAccessKeyId = ref('')
 const editBedrockSecretAccessKey = ref('')
@@ -3025,24 +3051,29 @@ const openAITextEndpointCapabilityLabel = computed(() => {
 })
 const openAIEndpointCapabilityOptions = computed<{ value: OpenAIEndpointCapability; label: string }[]>(() => [
   { value: 'chat_completions', label: openAITextEndpointCapabilityLabel.value },
-  { value: 'embeddings', label: t('admin.accounts.openai.capabilityEmbeddings') }
+  { value: 'responses', label: 'Responses' },
+  { value: 'embeddings', label: t('admin.accounts.openai.capabilityEmbeddings') },
+  { value: 'rerank', label: 'Rerank' }
 ])
 const openAITextGenerationCapabilityEnabled = computed(() =>
   openAIEndpointCapabilities.value.includes('chat_completions')
 )
 
 const normalizeOpenAIEndpointCapabilities = (values: OpenAIEndpointCapability[]) => {
-  const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'embeddings']
+  const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'responses', 'embeddings', 'rerank']
   const selected = allowed.filter((value) => values.includes(value))
   return selected.length > 0 ? selected : allowed
 }
 
 const readOpenAIEndpointCapabilities = (credentials?: Record<string, unknown>): OpenAIEndpointCapability[] => {
-  const raw = credentials?.openai_capabilities
+  const raw = credentials?.capabilities ?? credentials?.openai_capabilities
   if (Array.isArray(raw)) {
     return normalizeOpenAIEndpointCapabilities(
       raw.filter((value): value is OpenAIEndpointCapability =>
-        value === 'chat_completions' || value === 'embeddings'
+        value === 'chat_completions' ||
+        value === 'responses' ||
+        value === 'embeddings' ||
+        value === 'rerank'
       )
     )
   }
@@ -3054,7 +3085,7 @@ const readOpenAIEndpointCapabilities = (credentials?: Record<string, unknown>): 
         .filter((value) => capabilityMap[value] === true)
     )
   }
-  return ['chat_completions', 'embeddings']
+  return ['chat_completions', 'responses']
 }
 
 const toggleOpenAIEndpointCapability = (capability: OpenAIEndpointCapability, event?: Event) => {
@@ -3080,11 +3111,13 @@ const toggleOpenAIEndpointCapability = (capability: OpenAIEndpointCapability, ev
 
 const applyOpenAIEndpointCapabilities = (credentials: Record<string, unknown>) => {
   const capabilities = normalizeOpenAIEndpointCapabilities(openAIEndpointCapabilities.value)
-  if (capabilities.length === 2) {
+  if (capabilities.length === 4) {
+    delete credentials.capabilities
     delete credentials.openai_capabilities
     return
   }
-  credentials.openai_capabilities = capabilities
+  credentials.capabilities = capabilities
+  delete credentials.openai_capabilities
 }
 const normalizeOpenAIResponsesMode = (mode: unknown): OpenAIResponsesMode => {
   if (mode === 'force_responses' || mode === 'force_chat_completions') {
@@ -3093,7 +3126,8 @@ const normalizeOpenAIResponsesMode = (mode: unknown): OpenAIResponsesMode => {
   return 'auto'
 }
 const isOpenAIModelRestrictionDisabled = computed(() =>
-  props.account?.platform === 'openai' && openaiPassthroughEnabled.value
+  (props.account?.platform === 'openai' && openaiPassthroughEnabled.value) ||
+  (isExternalOpenAICompatiblePlatform(props.account?.platform) && externalRequestPassthroughEnabled.value)
 )
 const openAIResponsesStatusKey = computed(() => {
   if (openAIResponsesMode.value === 'force_responses') {
@@ -3161,6 +3195,7 @@ const tempUnschedPresets = computed(() => [
 const defaultBaseUrl = computed(() => {
   if (props.account?.platform === 'openai') return 'https://api.openai.com'
   if (props.account?.platform === 'gemini') return 'https://generativelanguage.googleapis.com'
+  if (props.account?.platform === 'external_openai_compatible') return ''
   if (props.account?.platform === 'volcengine_coding') return 'https://ark.cn-beijing.volces.com/api/coding/v3'
   if (props.account?.platform === 'xunfei_coding') return 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2'
   return 'https://api.anthropic.com'
@@ -3308,7 +3343,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   editPlanType.value = ''
   openAICompactMode.value = 'auto'
   openAIResponsesMode.value = 'auto'
-  openAIEndpointCapabilities.value = ['chat_completions', 'embeddings']
+  openAIEndpointCapabilities.value = ['chat_completions', 'responses']
   openAICompactModelMappings.value = []
   openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
@@ -3490,14 +3525,34 @@ const syncFormFromAccount = (newAccount: Account | null) => {
         ? 'https://api.openai.com'
         : newAccount.platform === 'gemini'
           ? 'https://generativelanguage.googleapis.com'
+          : newAccount.platform === 'external_openai_compatible'
+            ? ''
           : newAccount.platform === 'volcengine_coding'
             ? 'https://ark.cn-beijing.volces.com/api/coding/v3'
             : newAccount.platform === 'xunfei_coding'
               ? 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2'
               : 'https://api.anthropic.com'
     editBaseUrl.value = (credentials.base_url as string) || platformDefaultUrl
-    editXunfeiEmbeddingBaseUrl.value = (credentials.embedding_base_url as string) || ''
-    editXunfeiRerankBaseUrl.value = (credentials.rerank_base_url as string) || ''
+    resetExternalEndpointConfig()
+    if (isExternalOpenAICompatiblePlatform(newAccount.platform)) {
+      externalRequestPassthroughEnabled.value = credentials.request_passthrough_enabled === true
+      const endpointBaseUrls = credentials.endpoint_base_urls as Record<string, unknown> | undefined
+      const endpointPaths = credentials.endpoint_paths as Record<string, unknown> | undefined
+      for (const endpoint of externalOpenAIEndpoints) {
+        const baseUrl = endpointBaseUrls?.[endpoint.key]
+        const path = endpointPaths?.[endpoint.key]
+        externalEndpointBaseUrls[endpoint.key] = typeof baseUrl === 'string' ? baseUrl : ''
+        externalEndpointPaths[endpoint.key] = typeof path === 'string' && path.trim()
+          ? path
+          : defaultExternalEndpointPaths[endpoint.key]
+      }
+      if (!externalEndpointBaseUrls.embeddings && typeof credentials.embedding_base_url === 'string') {
+        externalEndpointBaseUrls.embeddings = credentials.embedding_base_url
+      }
+      if (!externalEndpointBaseUrls.rerank && typeof credentials.rerank_base_url === 'string') {
+        externalEndpointBaseUrls.rerank = credentials.rerank_base_url
+      }
+    }
 
     // Load model mappings and detect mode
     loadModelRestrictionFromMapping(credentials.model_mapping as Record<string, unknown> | undefined)
@@ -4087,7 +4142,10 @@ const handleSubmit = async () => {
     if (props.account.type === 'apikey') {
       const currentCredentials = (props.account.credentials as Record<string, unknown>) || {}
       const newBaseUrl = editBaseUrl.value.trim() || defaultBaseUrl.value
-      const shouldApplyModelMapping = !(props.account.platform === 'openai' && openaiPassthroughEnabled.value)
+      const shouldApplyModelMapping = !(
+        (props.account.platform === 'openai' && openaiPassthroughEnabled.value) ||
+        (isExternalOpenAICompatiblePlatform(props.account.platform) && externalRequestPassthroughEnabled.value)
+      )
 
       // Always update credentials for apikey type to handle model mapping changes
       const newCredentials: Record<string, unknown> = {
@@ -4129,21 +4187,32 @@ const handleSubmit = async () => {
           delete newCredentials.compact_model_mapping
         }
       }
-      if (props.account.platform === 'xunfei_coding') {
-        if (editXunfeiEmbeddingBaseUrl.value.trim()) {
-          newCredentials.embedding_base_url = editXunfeiEmbeddingBaseUrl.value.trim()
+      if (isExternalOpenAICompatiblePlatform(props.account.platform)) {
+        newCredentials.request_passthrough_enabled = externalRequestPassthroughEnabled.value
+        const endpointBaseUrls = Object.fromEntries(
+          externalOpenAIEndpoints
+            .map((endpoint) => [endpoint.key, externalEndpointBaseUrls[endpoint.key].trim()])
+            .filter(([, value]) => value)
+        )
+        const endpointPaths = Object.fromEntries(
+          externalOpenAIEndpoints
+            .map((endpoint) => [endpoint.key, externalEndpointPaths[endpoint.key].trim()])
+            .filter(([, value]) => value)
+        )
+        if (Object.keys(endpointBaseUrls).length > 0) {
+          newCredentials.endpoint_base_urls = endpointBaseUrls
         } else {
-          delete newCredentials.embedding_base_url
+          delete newCredentials.endpoint_base_urls
         }
-        if (editXunfeiRerankBaseUrl.value.trim()) {
-          newCredentials.rerank_base_url = editXunfeiRerankBaseUrl.value.trim()
+        if (Object.keys(endpointPaths).length > 0) {
+          newCredentials.endpoint_paths = endpointPaths
         } else {
-          delete newCredentials.rerank_base_url
+          delete newCredentials.endpoint_paths
         }
-      } else {
-        delete newCredentials.embedding_base_url
-        delete newCredentials.rerank_base_url
+        applyOpenAIEndpointCapabilities(newCredentials)
       }
+      delete newCredentials.embedding_base_url
+      delete newCredentials.rerank_base_url
 
       // Add pool mode if enabled
       if (poolModeEnabled.value) {

@@ -2267,6 +2267,7 @@ export default {
         gemini: 'Gemini',
         antigravity: 'Antigravity',
         grok: 'Grok',
+        external_openai_compatible: 'External OpenAI-Compatible API',
         volcengine_coding: 'Volcengine Ark Coding',
         xunfei_coding: 'Xunfei Coding/MaaS',
       },
@@ -2358,11 +2359,6 @@ export default {
         selectPlaceholder: 'Select groups to copy accounts from...',
         hint: 'Multiple groups can be selected, accounts will be deduplicated',
         hintEdit: '⚠️ Warning: This will replace all existing account bindings'
-      },
-      bindUngrouped: {
-        title: 'Bind ungrouped accounts',
-        hint: 'Add ungrouped accounts from the selected platform to this group.',
-        hintEdit: 'Add ungrouped accounts from this platform without removing existing bindings.'
       },
       modelRouting: {
         title: 'Model Routing',
@@ -3223,6 +3219,7 @@ export default {
         gemini: 'Gemini',
         antigravity: 'Antigravity',
         grok: 'Grok',
+        external_openai_compatible: 'External OpenAI-Compatible API',
         volcengine_coding: 'Volcengine Ark Coding',
         xunfei_coding: 'Xunfei Coding/MaaS',
       },

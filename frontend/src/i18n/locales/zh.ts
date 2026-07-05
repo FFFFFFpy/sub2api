@@ -2286,6 +2286,7 @@ export default {
         gemini: 'Gemini',
         antigravity: 'Antigravity',
         grok: 'Grok',
+        external_openai_compatible: 'OpenAI 兼容外部 API',
         volcengine_coding: '火山 Ark Coding',
         xunfei_coding: '讯飞 Coding/MaaS',
       },
@@ -2442,11 +2443,6 @@ export default {
         selectPlaceholder: '选择分组以复制其账号...',
         hint: '可选多个分组，账号会自动去重',
         hintEdit: '⚠️ 注意：这会替换当前分组的所有账号绑定'
-      },
-      bindUngrouped: {
-        title: '绑定未分组账号',
-        hint: '将所选平台下尚未分组的账号加入这个分组。',
-        hintEdit: '将当前平台下尚未分组的账号加入此分组，不会移除已有绑定。'
       },
       modelRouting: {
         title: '模型路由配置',
@@ -3410,6 +3406,7 @@ export default {
         gemini: 'Gemini',
         antigravity: 'Antigravity',
         grok: 'Grok',
+        external_openai_compatible: 'OpenAI 兼容外部 API',
         volcengine_coding: '火山 Ark Coding',
         xunfei_coding: '讯飞 Coding/MaaS',
       },

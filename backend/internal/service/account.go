@@ -87,11 +87,15 @@ const openAILongContextBillingEnabledKey = "openai_long_context_billing_enabled"
 
 const (
 	OpenAIEndpointCapabilityChatCompletions OpenAIEndpointCapability = "chat_completions"
+	OpenAIEndpointCapabilityResponses       OpenAIEndpointCapability = "responses"
 	OpenAIEndpointCapabilityEmbeddings      OpenAIEndpointCapability = "embeddings"
 	OpenAIEndpointCapabilityRerank          OpenAIEndpointCapability = "rerank"
 )
 
-const openAIEndpointCapabilitiesCredentialKey = "openai_capabilities"
+const (
+	openAIEndpointCapabilitiesCredentialKey       = "capabilities"
+	openAIEndpointCapabilitiesLegacyCredentialKey = "openai_capabilities"
+)
 
 // GrokMediaEligibleExtraKey is an optional per-account override stored in
 // accounts.extra. true forces media routing on, false disables it, and an
@@ -241,6 +245,14 @@ func (a *Account) IsGrok() bool {
 	return a.Platform == PlatformGrok
 }
 
+func (a *Account) IsExternalOpenAICompatible() bool {
+	return a != nil && (a.Platform == PlatformExternalOpenAI || a.IsLegacyExternalOpenAICompatible())
+}
+
+func (a *Account) IsLegacyExternalOpenAICompatible() bool {
+	return a != nil && (a.IsVolcengineCoding() || a.IsXunfeiCoding())
+}
+
 func (a *Account) IsVolcengineCoding() bool {
 	return a.Platform == PlatformVolcengineCoding
 }
@@ -254,7 +266,7 @@ func (a *Account) IsGrokOAuth() bool {
 }
 
 func (a *Account) IsOpenAICompatible() bool {
-	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.Platform == PlatformVolcengineCoding || a.Platform == PlatformXunfeiCoding)
+	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.IsExternalOpenAICompatible())
 }
 
 func (a *Account) GeminiOAuthType() string {
@@ -1209,7 +1221,7 @@ func (a *Account) IsOpenAI() bool {
 }
 
 func (a *Account) IsExternalOpenAICompatibleAPIKey() bool {
-	return a != nil && a.Type == AccountTypeAPIKey && (a.IsVolcengineCoding() || a.IsXunfeiCoding())
+	return a != nil && a.Type == AccountTypeAPIKey && a.IsExternalOpenAICompatible()
 }
 
 func (a *Account) IsAnthropic() bool {
@@ -1254,11 +1266,8 @@ func (a *Account) GetOpenAIBaseURL() string {
 			return baseURL
 		}
 	}
-	if a.IsVolcengineCoding() {
-		return DefaultVolcengineCodingBaseURL
-	}
-	if a.IsXunfeiCoding() {
-		return DefaultXunfeiCodingBaseURL
+	if a.IsExternalOpenAICompatible() {
+		return "https://api.openai.com/v1"
 	}
 	return "https://api.openai.com"
 }
@@ -1433,7 +1442,7 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 		}
 	}
 	switch capability {
-	case OpenAIEndpointCapabilityChatCompletions:
+	case OpenAIEndpointCapabilityChatCompletions, OpenAIEndpointCapabilityResponses:
 	case OpenAIEndpointCapabilityEmbeddings, OpenAIEndpointCapabilityRerank:
 		if a.Type != AccountTypeAPIKey {
 			return false
@@ -1444,6 +1453,9 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 
 	configured, found := a.openAIEndpointCapabilitySet()
 	if !found {
+		if a.IsExternalOpenAICompatible() {
+			return capability == OpenAIEndpointCapabilityChatCompletions || capability == OpenAIEndpointCapabilityResponses
+		}
 		return true
 	}
 	if capability == OpenAIEndpointCapabilityAlphaSearch && configured[string(OpenAIEndpointCapabilityChatCompletions)] {
@@ -1503,6 +1515,9 @@ func (a *Account) openAIEndpointCapabilitySet() (map[string]bool, bool) {
 		return nil, false
 	}
 	raw, found := a.Credentials[openAIEndpointCapabilitiesCredentialKey]
+	if !found || raw == nil {
+		raw, found = a.Credentials[openAIEndpointCapabilitiesLegacyCredentialKey]
+	}
 	if !found || raw == nil {
 		return nil, false
 	}
@@ -1638,6 +1653,18 @@ func (a *Account) IsOpenAIPassthroughEnabled() bool {
 		return enabled
 	}
 	return false
+}
+
+func (a *Account) IsExternalOpenAIRequestPassthroughEnabled(group *Group) bool {
+	if a == nil || !a.IsExternalOpenAICompatible() {
+		return false
+	}
+	if a.Credentials != nil {
+		if enabled, ok := a.Credentials["request_passthrough_enabled"].(bool); ok {
+			return enabled
+		}
+	}
+	return group != nil && group.RequestPassthroughEnabled
 }
 
 // IsOpenAIResponsesWebSocketV2Enabled 返回 OpenAI 账号是否开启 Responses WebSocket v2。
