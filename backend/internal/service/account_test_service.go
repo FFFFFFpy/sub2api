@@ -815,8 +815,25 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	normalizedBaseURL string,
 	authToken string,
 ) error {
+	return s.testOpenAIChatCompletionsConnectionWithURL(
+		c,
+		account,
+		testModelID,
+		prompt,
+		buildOpenAIChatCompletionsURL(normalizedBaseURL),
+		authToken,
+	)
+}
+
+func (s *AccountTestService) testOpenAIChatCompletionsConnectionWithURL(
+	c *gin.Context,
+	account *Account,
+	testModelID string,
+	prompt string,
+	apiURL string,
+	authToken string,
+) error {
 	ctx := c.Request.Context()
-	apiURL := buildOpenAIChatCompletionsURL(normalizedBaseURL)
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -888,11 +905,7 @@ func (s *AccountTestService) testExternalOpenAICompatibleAccountConnection(c *gi
 	requestedModelID := testModelID
 	testModelID = account.GetMappedModel(testModelID)
 
-	baseURL := account.GetOpenAIBaseURL()
-	normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
-	if err != nil {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
-	}
+	normalizedBaseURL := account.GetOpenAIBaseURL()
 
 	if isEmbeddingTestModel(requestedModelID) || isEmbeddingTestModel(testModelID) {
 		return s.testExternalOpenAICompatibleEmbeddingsConnection(c, account, testModelID, prompt, normalizedBaseURL, authToken)
@@ -901,7 +914,11 @@ func (s *AccountTestService) testExternalOpenAICompatibleAccountConnection(c *gi
 		return s.testExternalOpenAICompatibleRerankConnection(c, account, testModelID, prompt, normalizedBaseURL, authToken)
 	}
 
-	return s.testOpenAIChatCompletionsConnection(c, account, testModelID, prompt, normalizedBaseURL, authToken)
+	targetURL, err := s.externalOpenAICompatibleTestURL(account, ExternalEndpointChatCompletions)
+	if err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid chat completions URL: %s", err.Error()))
+	}
+	return s.testOpenAIChatCompletionsConnectionWithURL(c, account, testModelID, prompt, targetURL, authToken)
 }
 
 func (s *AccountTestService) externalOpenAICompatibleTestURL(account *Account, endpoint ExternalOpenAIEndpoint) (string, error) {

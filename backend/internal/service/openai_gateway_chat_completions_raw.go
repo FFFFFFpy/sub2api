@@ -232,7 +232,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	return result, forwardErr
 }
 
-func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, error) {
+func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account, incomingPath string) (string, error) {
 	if account.Platform == PlatformGrok {
 		targetURL, err := buildGrokChatCompletionsURL(account, s.cfg)
 		if err != nil {
@@ -241,7 +241,7 @@ func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, 
 		return targetURL, nil
 	}
 	if account.IsExternalOpenAICompatibleAPIKey() {
-		return s.externalOpenAICompatibleURL(account, ExternalEndpointChatCompletions, "")
+		return s.externalOpenAICompatibleURL(account, ExternalEndpointChatCompletions, incomingPath)
 	}
 
 	return s.openAIChatCompletionsTargetURL(account)

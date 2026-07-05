@@ -52,6 +52,7 @@ const (
 var AllowedQuotaPlatforms = []string{
 	PlatformAnthropic,
 	PlatformOpenAI,
+	PlatformExternalOpenAI,
 	PlatformGemini,
 	PlatformAntigravity,
 	PlatformGrok,
