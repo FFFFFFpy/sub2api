@@ -26,6 +26,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 )
 
 // sseDataPrefix matches SSE data lines with optional whitespace after colon.
@@ -194,6 +195,10 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 
 	if account.Platform == PlatformGrok {
 		return s.testGrokAccountConnection(c, account, modelID)
+	}
+
+	if account.IsExternalOpenAICompatibleAPIKey() {
+		return s.testExternalOpenAICompatibleAccountConnection(c, account, modelID, prompt)
 	}
 
 	if account.Platform == PlatformAntigravity {
@@ -780,6 +785,259 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	}
 
 	return s.processOpenAIChatCompletionsStream(c, resp.Body)
+}
+
+func (s *AccountTestService) testExternalOpenAICompatibleAccountConnection(c *gin.Context, account *Account, modelID string, prompt string) error {
+	if account.Type != AccountTypeAPIKey {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Unsupported %s account type: %s", account.Platform, account.Type))
+	}
+
+	authToken := account.GetOpenAIApiKey()
+	if authToken == "" {
+		return s.sendErrorAndEnd(c, "No API key available")
+	}
+
+	testModelID := strings.TrimSpace(modelID)
+	if testModelID == "" {
+		testModelID = firstConfiguredChatModelMappingTarget(account)
+	}
+	if testModelID == "" {
+		testModelID = openai.DefaultTestModel
+	}
+	requestedModelID := testModelID
+	testModelID = account.GetMappedModel(testModelID)
+
+	baseURL := ""
+	switch {
+	case account.IsVolcengineCoding():
+		baseURL = volcengineCodingBaseURL(account.GetCredential("base_url"))
+	case account.IsXunfeiCoding():
+		baseURL = xunfeiCodingBaseURL(account.GetCredential("base_url"))
+	default:
+		baseURL = account.GetOpenAIBaseURL()
+	}
+	normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
+	if err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
+	}
+
+	if isEmbeddingTestModel(requestedModelID) || isEmbeddingTestModel(testModelID) {
+		return s.testExternalOpenAICompatibleEmbeddingsConnection(c, account, testModelID, prompt, normalizedBaseURL, authToken)
+	}
+	if isRerankTestModel(requestedModelID) || isRerankTestModel(testModelID) {
+		return s.testExternalOpenAICompatibleRerankConnection(c, account, testModelID, prompt, normalizedBaseURL, authToken)
+	}
+
+	return s.testOpenAIChatCompletionsConnection(c, account, testModelID, prompt, normalizedBaseURL, authToken)
+}
+
+func isEmbeddingTestModel(model string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(model)), "embed")
+}
+
+func isRerankTestModel(model string) bool {
+	lower := strings.ToLower(strings.TrimSpace(model))
+	return strings.Contains(lower, "rerank") || strings.Contains(lower, "reranker")
+}
+
+func firstConfiguredChatModelMappingTarget(account *Account) string {
+	if account == nil {
+		return ""
+	}
+	fallback := ""
+	for _, mapped := range account.GetModelMapping() {
+		trimmed := strings.TrimSpace(mapped)
+		if trimmed == "" {
+			continue
+		}
+		if fallback == "" {
+			fallback = trimmed
+		}
+		lower := strings.ToLower(trimmed)
+		if !strings.Contains(lower, "embed") && !strings.Contains(lower, "rerank") {
+			return trimmed
+		}
+	}
+	return fallback
+}
+
+func (s *AccountTestService) testExternalOpenAICompatibleEmbeddingsConnection(
+	c *gin.Context,
+	account *Account,
+	testModelID string,
+	prompt string,
+	normalizedBaseURL string,
+	authToken string,
+) error {
+	ctx := c.Request.Context()
+	targetURL := buildOpenAIEmbeddingsURL(normalizedBaseURL)
+	switch {
+	case account.IsVolcengineCoding():
+		targetURL = buildVolcengineCodingURL(normalizedBaseURL, "/embeddings")
+	case account.IsXunfeiCoding():
+		targetURL = buildXunfeiCodingEmbeddingsURL(normalizedBaseURL, account.GetCredential("embedding_base_url"))
+		if embeddingBase := strings.TrimSpace(account.GetCredential("embedding_base_url")); embeddingBase != "" {
+			validatedEmbeddingBase, err := s.validateUpstreamBaseURL(xunfeiCodingBaseURL(embeddingBase))
+			if err != nil {
+				return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid embedding base URL: %s", err.Error()))
+			}
+			targetURL = buildXunfeiCodingEmbeddingsURL("", validatedEmbeddingBase)
+		}
+	}
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Writer.Flush()
+
+	input := strings.TrimSpace(prompt)
+	if input == "" {
+		input = "hello"
+	}
+	payloadBytes, _ := json.Marshal(map[string]any{
+		"model": testModelID,
+		"input": input,
+	})
+
+	s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
+	s.sendEvent(c, TestEvent{Type: "status", Text: "正在通过 /v1/embeddings 测试连接"})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payloadBytes))
+	if err != nil {
+		return s.sendErrorAndEnd(c, "Failed to create Embeddings request")
+	}
+	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+authToken)
+
+	proxyURL := ""
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+
+	resp, err := s.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+	if err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Embeddings API (/v1/embeddings) request failed: %s", err.Error()))
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Embeddings API (/v1/embeddings) returned %d: %s", resp.StatusCode, string(body)))
+	}
+	if !json.Valid(body) {
+		return s.sendErrorAndEnd(c, "Invalid Embeddings response from /v1/embeddings: expected JSON")
+	}
+
+	data := gjson.GetBytes(body, "data")
+	if data.Exists() && data.IsArray() {
+		s.sendEvent(c, TestEvent{Type: "content", Text: fmt.Sprintf("Embeddings probe returned %d item(s)", len(data.Array()))})
+	}
+	s.sendEvent(c, TestEvent{Type: "status", Text: "已通过 /v1/embeddings 验证"})
+	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+	return nil
+}
+
+func (s *AccountTestService) testExternalOpenAICompatibleRerankConnection(
+	c *gin.Context,
+	account *Account,
+	testModelID string,
+	prompt string,
+	normalizedBaseURL string,
+	authToken string,
+) error {
+	ctx := c.Request.Context()
+	targetURL := ""
+	switch {
+	case account.IsVolcengineCoding():
+		targetURL = buildVolcengineCodingURL(normalizedBaseURL, "/rerank")
+	case account.IsXunfeiCoding():
+		embeddingBase := strings.TrimSpace(account.GetCredential("embedding_base_url"))
+		rerankBase := strings.TrimSpace(account.GetCredential("rerank_base_url"))
+		if rerankBase != "" {
+			validatedRerankBase, err := s.validateUpstreamBaseURL(xunfeiCodingBaseURL(rerankBase))
+			if err != nil {
+				return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid rerank base URL: %s", err.Error()))
+			}
+			targetURL = buildXunfeiCodingRerankURL("", "", validatedRerankBase)
+		} else if embeddingBase != "" {
+			validatedEmbeddingBase, err := s.validateUpstreamBaseURL(xunfeiCodingBaseURL(embeddingBase))
+			if err != nil {
+				return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid embedding base URL: %s", err.Error()))
+			}
+			targetURL = buildXunfeiCodingRerankURL("", validatedEmbeddingBase, "")
+		} else {
+			targetURL = buildXunfeiCodingRerankURL(normalizedBaseURL, "", "")
+		}
+	default:
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Rerank test is not supported for platform %s", account.Platform))
+	}
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Writer.Flush()
+
+	query := strings.TrimSpace(prompt)
+	if query == "" {
+		query = "hello"
+	}
+	payloadBytes, _ := json.Marshal(map[string]any{
+		"model":     testModelID,
+		"query":     query,
+		"documents": []string{"hello world", "goodbye"},
+		"top_n":     2,
+	})
+
+	s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
+	s.sendEvent(c, TestEvent{Type: "status", Text: "正在通过 /v1/rerank 测试连接"})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payloadBytes))
+	if err != nil {
+		return s.sendErrorAndEnd(c, "Failed to create Rerank request")
+	}
+	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+authToken)
+
+	proxyURL := ""
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+
+	resp, err := s.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+	if err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Rerank API (/v1/rerank) request failed: %s", err.Error()))
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Rerank API (/v1/rerank) returned %d: %s", resp.StatusCode, string(body)))
+	}
+	if !json.Valid(body) {
+		return s.sendErrorAndEnd(c, "Invalid Rerank response from /v1/rerank: expected JSON")
+	}
+
+	if results := firstExistingGJSONResult(gjson.GetBytes(body, "results"), gjson.GetBytes(body, "data")); results.Exists() && results.IsArray() {
+		s.sendEvent(c, TestEvent{Type: "content", Text: fmt.Sprintf("Rerank probe returned %d result(s)", len(results.Array()))})
+	}
+	s.sendEvent(c, TestEvent{Type: "status", Text: "已通过 /v1/rerank 验证"})
+	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+	return nil
+}
+
+func firstExistingGJSONResult(values ...gjson.Result) gjson.Result {
+	for _, value := range values {
+		if value.Exists() {
+			return value
+		}
+	}
+	return gjson.Result{}
 }
 
 // testOpenAICompactConnection probes /responses/compact and persists the

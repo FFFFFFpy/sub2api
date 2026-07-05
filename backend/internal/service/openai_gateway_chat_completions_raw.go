@@ -146,6 +146,8 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	upstreamReq.Header.Set("Authorization", "Bearer "+token)
 	if clientStream {
 		upstreamReq.Header.Set("Accept", "text/event-stream")
+	} else if accept := strings.TrimSpace(c.GetHeader("Accept")); accept != "" {
+		upstreamReq.Header.Set("Accept", accept)
 	} else {
 		upstreamReq.Header.Set("Accept", "application/json")
 	}
@@ -255,6 +257,22 @@ func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, 
 			return "", fmt.Errorf("invalid grok base_url: %w", err)
 		}
 		return targetURL, nil
+	}
+	if account.IsVolcengineCoding() {
+		baseURL := volcengineCodingBaseURL(account.GetCredential("base_url"))
+		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+		if err != nil {
+			return "", fmt.Errorf("invalid base_url: %w", err)
+		}
+		return buildVolcengineCodingURL(validatedURL, "/chat/completions"), nil
+	}
+	if account.IsXunfeiCoding() {
+		baseURL := xunfeiCodingBaseURL(account.GetCredential("base_url"))
+		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+		if err != nil {
+			return "", fmt.Errorf("invalid base_url: %w", err)
+		}
+		return buildXunfeiCodingChatCompletionsURL(validatedURL), nil
 	}
 
 	baseURL := account.GetOpenAIBaseURL()

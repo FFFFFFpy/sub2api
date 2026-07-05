@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (s *OpenAIGatewayService) ForwardEmbeddings(
+func (s *OpenAIGatewayService) ForwardRerank(
 	ctx context.Context,
 	c *gin.Context,
 	account *Account,
@@ -28,7 +28,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 
 	originalModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
 	if originalModel == "" {
-		writeOpenAIEmbeddingsError(c, http.StatusBadRequest, "invalid_request_error", "model is required")
+		writeOpenAIRerankError(c, http.StatusBadRequest, "invalid_request_error", "model is required")
 		return nil, fmt.Errorf("missing model in request")
 	}
 
@@ -39,8 +39,9 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 		upstreamBody = ReplaceModelInBody(body, upstreamModel)
 	}
 
-	logger.L().Debug("openai embeddings: forwarding",
+	logger.L().Debug("openai-compatible rerank: forwarding",
 		zap.Int64("account_id", account.ID),
+		zap.String("platform", account.Platform),
 		zap.String("original_model", originalModel),
 		zap.String("billing_model", billingModel),
 		zap.String("upstream_model", upstreamModel),
@@ -50,27 +51,9 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 	if apiKey == "" {
 		return nil, fmt.Errorf("account %d missing api_key", account.ID)
 	}
-	baseURL := account.GetOpenAIBaseURL()
-	if baseURL == "" {
-		baseURL = "https://api.openai.com"
-	}
-	validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+	targetURL, err := s.rerankURL(account)
 	if err != nil {
-		return nil, fmt.Errorf("invalid base_url: %w", err)
-	}
-	targetURL := buildOpenAIEmbeddingsURL(validatedURL)
-	switch account.Platform {
-	case PlatformVolcengineCoding:
-		targetURL = buildVolcengineCodingURL(validatedURL, "/embeddings")
-	case PlatformXunfeiCoding:
-		targetURL = buildXunfeiCodingEmbeddingsURL(validatedURL, account.GetCredential("embedding_base_url"))
-		if embeddingBase := strings.TrimSpace(account.GetCredential("embedding_base_url")); embeddingBase != "" {
-			validatedEmbeddingBase, err := s.validateUpstreamBaseURL(xunfeiCodingBaseURL(embeddingBase))
-			if err != nil {
-				return nil, fmt.Errorf("invalid embedding_base_url: %w", err)
-			}
-			targetURL = buildXunfeiCodingEmbeddingsURL("", validatedEmbeddingBase)
-		}
+		return nil, err
 	}
 
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
@@ -95,9 +78,6 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 			}
 		}
 	}
-	if customUA := account.GetOpenAIUserAgent(); customUA != "" {
-		upstreamReq.Header.Set("user-agent", customUA)
-	}
 
 	proxyURL := ""
 	if account.Proxy != nil {
@@ -115,7 +95,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 			Kind:               "request_error",
 			Message:            safeErr,
 		})
-		writeOpenAIEmbeddingsError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed")
+		writeOpenAIRerankError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed")
 		return nil, fmt.Errorf("upstream request failed: %s", safeErr)
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -153,23 +133,23 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 				RetryableOnSameAccount: account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
 			}
 		}
-		writeOpenAIEmbeddingsUpstreamResponse(c, resp, respBody, s.responseHeaderFilter)
+		writeOpenAIRerankUpstreamResponse(c, resp, respBody, s.responseHeaderFilter)
 		return nil, fmt.Errorf("upstream returned status %d", resp.StatusCode)
 	}
 
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		if !errors.Is(err, ErrUpstreamResponseBodyTooLarge) {
-			writeOpenAIEmbeddingsError(c, http.StatusBadGateway, "api_error", "Failed to read upstream response")
+			writeOpenAIRerankError(c, http.StatusBadGateway, "api_error", "Failed to read upstream response")
 		}
 		return nil, fmt.Errorf("read upstream body: %w", err)
 	}
 
-	writeOpenAIEmbeddingsUpstreamResponse(c, resp, respBody, s.responseHeaderFilter)
+	writeOpenAIRerankUpstreamResponse(c, resp, respBody, s.responseHeaderFilter)
 
 	return &OpenAIForwardResult{
 		RequestID:     firstNonEmptyString(resp.Header.Get("x-request-id"), resp.Header.Get("request-id")),
-		Usage:         extractOpenAIEmbeddingsUsage(respBody),
+		Usage:         extractOpenAIRerankUsage(respBody),
 		Model:         originalModel,
 		BillingModel:  billingModel,
 		UpstreamModel: upstreamModel,
@@ -178,11 +158,45 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 	}, nil
 }
 
-func writeOpenAIEmbeddingsUpstreamResponse(c *gin.Context, resp *http.Response, body []byte, filter *responseheaders.CompiledHeaderFilter) {
-	if c == nil || resp == nil {
-		return
+func (s *OpenAIGatewayService) rerankURL(account *Account) (string, error) {
+	switch account.Platform {
+	case PlatformVolcengineCoding:
+		baseURL := volcengineCodingBaseURL(account.GetCredential("base_url"))
+		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+		if err != nil {
+			return "", fmt.Errorf("invalid base_url: %w", err)
+		}
+		return buildVolcengineCodingURL(validatedURL, "/rerank"), nil
+	case PlatformXunfeiCoding:
+		baseURL := xunfeiCodingBaseURL(account.GetCredential("base_url"))
+		validatedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
+		if err != nil {
+			return "", fmt.Errorf("invalid base_url: %w", err)
+		}
+		embeddingBase := strings.TrimSpace(account.GetCredential("embedding_base_url"))
+		rerankBase := strings.TrimSpace(account.GetCredential("rerank_base_url"))
+		if rerankBase != "" {
+			validatedRerankBase, err := s.validateUpstreamBaseURL(xunfeiCodingBaseURL(rerankBase))
+			if err != nil {
+				return "", fmt.Errorf("invalid rerank_base_url: %w", err)
+			}
+			return buildXunfeiCodingRerankURL("", "", validatedRerankBase), nil
+		}
+		if embeddingBase != "" {
+			validatedEmbeddingBase, err := s.validateUpstreamBaseURL(xunfeiCodingBaseURL(embeddingBase))
+			if err != nil {
+				return "", fmt.Errorf("invalid embedding_base_url: %w", err)
+			}
+			return buildXunfeiCodingRerankURL("", validatedEmbeddingBase, ""), nil
+		}
+		return buildXunfeiCodingRerankURL(validatedBaseURL, "", ""), nil
+	default:
+		return "", fmt.Errorf("rerank is not supported for platform %s", account.Platform)
 	}
-	if c.Writer.Written() {
+}
+
+func writeOpenAIRerankUpstreamResponse(c *gin.Context, resp *http.Response, body []byte, filter *responseheaders.CompiledHeaderFilter) {
+	if c == nil || resp == nil || c.Writer.Written() {
 		return
 	}
 	if resp.Header != nil {
@@ -197,7 +211,7 @@ func writeOpenAIEmbeddingsUpstreamResponse(c *gin.Context, resp *http.Response, 
 	_, _ = c.Writer.Write(body)
 }
 
-func writeOpenAIEmbeddingsError(c *gin.Context, statusCode int, errType, message string) {
+func writeOpenAIRerankError(c *gin.Context, statusCode int, errType, message string) {
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
 			"type":    errType,
@@ -206,7 +220,7 @@ func writeOpenAIEmbeddingsError(c *gin.Context, statusCode int, errType, message
 	})
 }
 
-func extractOpenAIEmbeddingsUsage(body []byte) OpenAIUsage {
+func extractOpenAIRerankUsage(body []byte) OpenAIUsage {
 	usage := gjson.GetBytes(body, "usage")
 	if !usage.Exists() || !usage.IsObject() {
 		return OpenAIUsage{}
@@ -220,45 +234,8 @@ func extractOpenAIEmbeddingsUsage(body []byte) OpenAIUsage {
 		usage.Get("completion_tokens"),
 		usage.Get("output_tokens"),
 	)
-	cacheReadTokens := firstPositiveGJSONInt(
-		usage.Get("prompt_tokens_details.cached_tokens"),
-		usage.Get("input_tokens_details.cached_tokens"),
-		usage.Get("cache_read_tokens"),
-		usage.Get("cache_read_input_tokens"),
-	)
-	cacheCreationTokens := firstPositiveGJSONInt(
-		usage.Get("cache_creation_tokens"),
-		usage.Get("cache_creation_input_tokens"),
-		usage.Get("input_tokens_details.cache_creation_tokens"),
-	)
-	// 多模态 embedding（如 doubao-embedding-vision）回传图文 token 拆分，
-	// 用于图文不同价计费；纯文本 embedding 该字段为 0，行为不变。
-	imageInputTokens := firstPositiveGJSONInt(
-		usage.Get("prompt_tokens_details.image_tokens"),
-		usage.Get("input_tokens_details.image_tokens"),
-	)
 	return OpenAIUsage{
-		InputTokens:              inputTokens,
-		ImageInputTokens:         imageInputTokens,
-		OutputTokens:             outputTokens,
-		CacheReadInputTokens:     cacheReadTokens,
-		CacheCreationInputTokens: cacheCreationTokens,
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
 	}
-}
-
-func firstPositiveGJSONInt(values ...gjson.Result) int {
-	for _, value := range values {
-		if !value.Exists() {
-			continue
-		}
-		n := int(value.Int())
-		if n > 0 {
-			return n
-		}
-	}
-	return 0
-}
-
-func buildOpenAIEmbeddingsURL(base string) string {
-	return buildOpenAIEndpointURL(base, "/v1/embeddings")
 }

@@ -1374,8 +1374,13 @@ func (s *OpenAIGatewayService) SelectAccountForModelWithExclusions(ctx context.C
 // noAvailableOpenAISelectionError builds the standard "no account available" error
 // while preserving the compact-specific error when applicable.
 func normalizeOpenAICompatiblePlatform(platform string) string {
-	if platform == PlatformGrok {
+	switch platform {
+	case PlatformGrok:
 		return PlatformGrok
+	case PlatformVolcengineCoding:
+		return PlatformVolcengineCoding
+	case PlatformXunfeiCoding:
+		return PlatformXunfeiCoding
 	}
 	return PlatformOpenAI
 }
@@ -3682,6 +3687,13 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	case AccountTypeOAuth:
 		targetURL = chatgptCodexURL
 	case AccountTypeAPIKey:
+		if externalURL, handled, err := s.externalOpenAICompatibleResponsesURL(account); handled {
+			if err != nil {
+				return nil, err
+			}
+			targetURL = externalURL
+			break
+		}
 		baseURL := account.GetOpenAIBaseURL()
 		if baseURL != "" {
 			validatedURL, err := s.validateUpstreamBaseURL(baseURL)
@@ -4471,6 +4483,13 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		targetURL = chatgptCodexURL
 	case AccountTypeAPIKey:
 		// API Key accounts use Platform API or custom base URL
+		if externalURL, handled, err := s.externalOpenAICompatibleResponsesURL(account); handled {
+			if err != nil {
+				return nil, err
+			}
+			targetURL = externalURL
+			break
+		}
 		baseURL := account.GetOpenAIBaseURL()
 		if baseURL == "" {
 			targetURL = openaiPlatformAPIURL

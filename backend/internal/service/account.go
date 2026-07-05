@@ -77,6 +77,7 @@ type OpenAIEndpointCapability string
 const (
 	OpenAIEndpointCapabilityChatCompletions OpenAIEndpointCapability = "chat_completions"
 	OpenAIEndpointCapabilityEmbeddings      OpenAIEndpointCapability = "embeddings"
+	OpenAIEndpointCapabilityRerank          OpenAIEndpointCapability = "rerank"
 )
 
 const openAIEndpointCapabilitiesCredentialKey = "openai_capabilities"
@@ -224,12 +225,20 @@ func (a *Account) IsGrok() bool {
 	return a.Platform == PlatformGrok
 }
 
+func (a *Account) IsVolcengineCoding() bool {
+	return a.Platform == PlatformVolcengineCoding
+}
+
+func (a *Account) IsXunfeiCoding() bool {
+	return a.Platform == PlatformXunfeiCoding
+}
+
 func (a *Account) IsGrokOAuth() bool {
 	return a.IsGrok() && a.Type == AccountTypeOAuth
 }
 
 func (a *Account) IsOpenAICompatible() bool {
-	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok)
+	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.Platform == PlatformVolcengineCoding || a.Platform == PlatformXunfeiCoding)
 }
 
 func (a *Account) GeminiOAuthType() string {
@@ -1174,6 +1183,10 @@ func (a *Account) IsOpenAI() bool {
 	return a.Platform == PlatformOpenAI
 }
 
+func (a *Account) IsExternalOpenAICompatibleAPIKey() bool {
+	return a != nil && a.Type == AccountTypeAPIKey && (a.IsVolcengineCoding() || a.IsXunfeiCoding())
+}
+
 func (a *Account) IsAnthropic() bool {
 	return a.Platform == PlatformAnthropic
 }
@@ -1195,7 +1208,7 @@ func (a *Account) IsOpenAIApiKey() bool {
 }
 
 func (a *Account) GetOpenAIBaseURL() string {
-	if !a.IsOpenAI() {
+	if !a.IsOpenAI() && !a.IsExternalOpenAICompatibleAPIKey() {
 		return ""
 	}
 	if a.Type == AccountTypeAPIKey {
@@ -1203,6 +1216,12 @@ func (a *Account) GetOpenAIBaseURL() string {
 		if baseURL != "" {
 			return baseURL
 		}
+	}
+	if a.IsVolcengineCoding() {
+		return DefaultVolcengineCodingBaseURL
+	}
+	if a.IsXunfeiCoding() {
+		return DefaultXunfeiCodingBaseURL
 	}
 	return "https://api.openai.com"
 }
@@ -1254,7 +1273,7 @@ func (a *Account) GetOpenAIIDToken() string {
 }
 
 func (a *Account) GetOpenAIApiKey() string {
-	if !a.IsOpenAIApiKey() {
+	if !a.IsOpenAIApiKey() && !a.IsExternalOpenAICompatibleAPIKey() {
 		return ""
 	}
 	return a.GetCredential("api_key")
@@ -1331,7 +1350,7 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 	}
 	switch capability {
 	case OpenAIEndpointCapabilityChatCompletions:
-	case OpenAIEndpointCapabilityEmbeddings:
+	case OpenAIEndpointCapabilityEmbeddings, OpenAIEndpointCapabilityRerank:
 		if a.Type != AccountTypeAPIKey {
 			return false
 		}

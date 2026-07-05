@@ -241,6 +241,8 @@ type CreateGroupInput struct {
 	RPMLimit int
 	// 从指定分组复制账号（创建分组后在同一事务内绑定）
 	CopyAccountsFromGroupIDs []int64
+	// 绑定当前平台下尚未分组的账号。
+	BindUngroupedAccounts bool
 }
 
 type UpdateGroupInput struct {
@@ -287,6 +289,8 @@ type UpdateGroupInput struct {
 	RPMLimit *int
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64
+	// 绑定当前平台下尚未分组的账号。
+	BindUngroupedAccounts bool
 }
 
 type CreateAccountInput struct {
@@ -1805,6 +1809,8 @@ func defaultModelsListCandidateIDs(platform string) []string {
 		return ids
 	case PlatformGrok:
 		return xai.DefaultModelIDs()
+	case PlatformVolcengineCoding, PlatformXunfeiCoding:
+		return openai.DefaultModelIDs()
 	default:
 		ids := make([]string, 0, len(claude.DefaultModels))
 		for _, model := range claude.DefaultModels {
@@ -1917,6 +1923,14 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		if err != nil {
 			return nil, fmt.Errorf("failed to get accounts from source groups: %w", err)
 		}
+	}
+	if input.BindUngroupedAccounts {
+		ungroupedAccountIDs, err := s.listUngroupedAccountIDsByPlatform(ctx, platform)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get ungrouped accounts: %w", err)
+		}
+		accountIDsToCopy = append(accountIDsToCopy, ungroupedAccountIDs...)
+		accountIDsToCopy = uniqueAccountIDs(accountIDsToCopy)
 	}
 
 	group := &Group{
@@ -2234,8 +2248,11 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		s.authCacheInvalidator.InvalidateAuthCacheByGroupID(ctx, id)
 	}
 
+	var accountIDsToBind []int64
+	replaceExistingAccountBindings := len(input.CopyAccountsFromGroupIDs) > 0
+
 	// 如果指定了复制账号的源分组，同步绑定（替换当前分组的账号）
-	if len(input.CopyAccountsFromGroupIDs) > 0 {
+	if replaceExistingAccountBindings {
 		// 去重源分组 IDs
 		seen := make(map[int64]struct{})
 		uniqueSourceGroupIDs := make([]int64, 0, len(input.CopyAccountsFromGroupIDs))
@@ -2267,15 +2284,29 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		if err != nil {
 			return nil, fmt.Errorf("failed to get accounts from source groups: %w", err)
 		}
+		accountIDsToBind = append(accountIDsToBind, accountIDsToCopy...)
+	}
 
-		// 先清空当前分组的所有账号绑定
-		if _, err := s.groupRepo.DeleteAccountGroupsByGroupID(ctx, id); err != nil {
-			return nil, fmt.Errorf("failed to clear existing account bindings: %w", err)
+	if input.BindUngroupedAccounts {
+		ungroupedAccountIDs, err := s.listUngroupedAccountIDsByPlatform(ctx, group.Platform)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get ungrouped accounts: %w", err)
+		}
+		accountIDsToBind = append(accountIDsToBind, ungroupedAccountIDs...)
+	}
+	accountIDsToBind = uniqueAccountIDs(accountIDsToBind)
+
+	if replaceExistingAccountBindings || len(accountIDsToBind) > 0 {
+		if replaceExistingAccountBindings {
+			// 先清空当前分组的所有账号绑定
+			if _, err := s.groupRepo.DeleteAccountGroupsByGroupID(ctx, id); err != nil {
+				return nil, fmt.Errorf("failed to clear existing account bindings: %w", err)
+			}
 		}
 
 		// require_oauth_only: 过滤掉 apikey 类型账号
-		if group.RequireOAuthOnly && (group.Platform == PlatformOpenAI || group.Platform == PlatformAntigravity || group.Platform == PlatformAnthropic || group.Platform == PlatformGemini || group.Platform == PlatformGrok) && len(accountIDsToCopy) > 0 {
-			accounts, err := s.accountRepo.GetByIDs(ctx, accountIDsToCopy)
+		if group.RequireOAuthOnly && (group.Platform == PlatformOpenAI || group.Platform == PlatformAntigravity || group.Platform == PlatformAnthropic || group.Platform == PlatformGemini || group.Platform == PlatformGrok) && len(accountIDsToBind) > 0 {
+			accounts, err := s.accountRepo.GetByIDs(ctx, accountIDsToBind)
 			if err != nil {
 				return nil, fmt.Errorf("failed to fetch accounts for oauth filter: %w", err)
 			}
@@ -2286,17 +2317,17 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 				}
 			}
 			var filtered []int64
-			for _, aid := range accountIDsToCopy {
+			for _, aid := range accountIDsToBind {
 				if _, ok := oauthIDs[aid]; ok {
 					filtered = append(filtered, aid)
 				}
 			}
-			accountIDsToCopy = filtered
+			accountIDsToBind = filtered
 		}
 
 		// 再绑定源分组的账号
-		if len(accountIDsToCopy) > 0 {
-			if err := s.groupRepo.BindAccountsToGroup(ctx, id, accountIDsToCopy); err != nil {
+		if len(accountIDsToBind) > 0 {
+			if err := s.groupRepo.BindAccountsToGroup(ctx, id, accountIDsToBind); err != nil {
 				return nil, fmt.Errorf("failed to bind accounts to group: %w", err)
 			}
 		}
@@ -2541,6 +2572,48 @@ func (s *adminServiceImpl) AdminResetAPIKeyRateLimitUsage(ctx context.Context, k
 		_ = s.billingCacheService.InvalidateAPIKeyRateLimit(ctx, apiKey.ID)
 	}
 	return apiKey, nil
+}
+
+func (s *adminServiceImpl) listUngroupedAccountIDsByPlatform(ctx context.Context, platform string) ([]int64, error) {
+	const pageSize = 1000
+	var ids []int64
+	for page := 1; ; page++ {
+		accounts, result, err := s.accountRepo.ListWithFilters(ctx, pagination.PaginationParams{
+			Page:      page,
+			PageSize:  pageSize,
+			SortBy:    "priority",
+			SortOrder: pagination.SortOrderAsc,
+		}, platform, "", "", "", AccountListGroupUngrouped, "")
+		if err != nil {
+			return nil, err
+		}
+		for i := range accounts {
+			ids = append(ids, accounts[i].ID)
+		}
+		if result == nil || page >= result.Pages || len(accounts) == 0 {
+			break
+		}
+	}
+	return ids, nil
+}
+
+func uniqueAccountIDs(ids []int64) []int64 {
+	if len(ids) == 0 {
+		return nil
+	}
+	seen := make(map[int64]struct{}, len(ids))
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 // ReplaceUserGroup 替换用户的专属分组

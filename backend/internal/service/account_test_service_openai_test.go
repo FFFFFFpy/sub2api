@@ -447,6 +447,174 @@ func TestAccountTestService_OpenAIAPIKeyResponsesUnsupportedUsesChatCompletionsP
 	require.NotContains(t, body, "当前测试接口仅支持 Responses API 路径")
 }
 
+func TestAccountTestService_CodingPlatformsUseChatCompletionsPath(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name     string
+		account  *Account
+		modelID  string
+		wantURL  string
+		wantBody string
+	}{
+		{
+			name: "volcengine coding",
+			account: &Account{
+				ID:       101,
+				Platform: PlatformVolcengineCoding,
+				Type:     AccountTypeAPIKey,
+				Credentials: map[string]any{
+					"api_key":  "ark-test",
+					"base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+				},
+			},
+			modelID:  "kimi-k2.7-code",
+			wantURL:  "https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions",
+			wantBody: "kimi-k2.7-code",
+		},
+		{
+			name: "xunfei coding",
+			account: &Account{
+				ID:       102,
+				Platform: PlatformXunfeiCoding,
+				Type:     AccountTypeAPIKey,
+				Credentials: map[string]any{
+					"api_key":  "xf-test",
+					"base_url": "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+					"model_mapping": map[string]any{
+						"xop3qwen8bembedding": "xop3qwen8bembedding",
+						"xop3qwen8breranker":  "xop3qwen8breranker",
+						"xopqwen36v35b":       "xopqwen36v35b",
+					},
+				},
+			},
+			wantURL:  "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/chat/completions",
+			wantBody: "xopqwen36v35b",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, recorder := newTestContext()
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+					`data: {"id":"chatcmpl_test","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"pong"},"finish_reason":null}]}`,
+					"",
+					`data: {"id":"chatcmpl_test","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+					"",
+					"data: [DONE]",
+					"",
+				}, "\n"))),
+			}}
+			repo := &openAIAccountTestRepo{mockAccountRepoForGemini: mockAccountRepoForGemini{
+				accountsByID: map[int64]*Account{tt.account.ID: tt.account},
+			}}
+			svc := &AccountTestService{
+				accountRepo:  repo,
+				httpUpstream: upstream,
+				cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
+			}
+
+			err := svc.TestAccountConnection(ctx, tt.account.ID, tt.modelID, "hello", "")
+			require.NoError(t, err)
+			require.NotNil(t, upstream.lastReq)
+			require.Equal(t, tt.wantURL, upstream.lastReq.URL.String())
+			require.Equal(t, "Bearer "+tt.account.GetCredential("api_key"), upstream.lastReq.Header.Get("Authorization"))
+			require.Equal(t, "text/event-stream", upstream.lastReq.Header.Get("Accept"))
+			require.Equal(t, tt.wantBody, gjson.GetBytes(upstream.lastBody, "model").String())
+			require.Equal(t, "hello", gjson.GetBytes(upstream.lastBody, "messages.0.content").String())
+			require.NotContains(t, upstream.lastReq.URL.String(), "/v1/messages")
+			require.Contains(t, recorder.Body.String(), `"success":true`)
+		})
+	}
+}
+
+func TestAccountTestService_XunfeiCodingEmbeddingAndRerankUseMatchingEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name       string
+		modelID    string
+		body       string
+		wantURL    string
+		wantStatus string
+		assertBody func(t *testing.T, body []byte)
+	}{
+		{
+			name:       "embedding",
+			modelID:    "xop3qwen8bembedding",
+			body:       `{"object":"list","data":[{"object":"embedding","index":0,"embedding":[0.1,0.2]}],"usage":{"total_tokens":1}}`,
+			wantURL:    "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/embeddings",
+			wantStatus: "已通过 /v1/embeddings 验证",
+			assertBody: func(t *testing.T, body []byte) {
+				require.Equal(t, "xop3qwen8bembedding", gjson.GetBytes(body, "model").String())
+				require.Equal(t, "hello", gjson.GetBytes(body, "input").String())
+				require.False(t, gjson.GetBytes(body, "messages").Exists())
+			},
+		},
+		{
+			name:       "rerank",
+			modelID:    "xop3qwen8breranker",
+			body:       `{"results":[{"index":0,"relevance_score":0.95}],"usage":{"total_tokens":2}}`,
+			wantURL:    "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/rerank",
+			wantStatus: "已通过 /v1/rerank 验证",
+			assertBody: func(t *testing.T, body []byte) {
+				require.Equal(t, "xop3qwen8breranker", gjson.GetBytes(body, "model").String())
+				require.Equal(t, "hello", gjson.GetBytes(body, "query").String())
+				require.True(t, gjson.GetBytes(body, "documents").IsArray())
+				require.False(t, gjson.GetBytes(body, "messages").Exists())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, recorder := newTestContext()
+			account := &Account{
+				ID:       103,
+				Platform: PlatformXunfeiCoding,
+				Type:     AccountTypeAPIKey,
+				Credentials: map[string]any{
+					"api_key":            "xf-test",
+					"base_url":           "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+					"embedding_base_url": "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+					"rerank_base_url":    "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+					"model_mapping": map[string]any{
+						"xopqwen36v35b":       "xopqwen36v35b",
+						"xop3qwen8bembedding": "xop3qwen8bembedding",
+						"xop3qwen8breranker":  "xop3qwen8breranker",
+					},
+				},
+			}
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(tt.body)),
+			}}
+			repo := &openAIAccountTestRepo{mockAccountRepoForGemini: mockAccountRepoForGemini{
+				accountsByID: map[int64]*Account{account.ID: account},
+			}}
+			svc := &AccountTestService{
+				accountRepo:  repo,
+				httpUpstream: upstream,
+				cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
+			}
+
+			err := svc.TestAccountConnection(ctx, account.ID, tt.modelID, "hello", "")
+			require.NoError(t, err)
+			require.NotNil(t, upstream.lastReq)
+			require.Equal(t, tt.wantURL, upstream.lastReq.URL.String())
+			require.Equal(t, "Bearer xf-test", upstream.lastReq.Header.Get("Authorization"))
+			require.Equal(t, "application/json", upstream.lastReq.Header.Get("Accept"))
+			tt.assertBody(t, upstream.lastBody)
+			require.Contains(t, recorder.Body.String(), tt.wantStatus)
+			require.Contains(t, recorder.Body.String(), `"success":true`)
+		})
+	}
+}
+
 func TestAccountTestService_OpenAIChatCompletionsPathReturns4xx(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, recorder := newTestContext()
