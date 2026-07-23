@@ -26,8 +26,11 @@ jobs:
           fetch-depth: 0
 
       - name: Rebase custom commits onto upstream main
+        id: sync
         shell: bash
         run: |
+          set -o pipefail
+          exec > >(tee upstream-sync.log) 2>&1
           set -Eeuo pipefail
 
           git config user.name "github-actions[bot]"
@@ -35,7 +38,6 @@ jobs:
 
           git remote add upstream https://github.com/Wei-Shaw/sub2api.git
           git fetch upstream main
-          git fetch origin main backup/pre-upstream-sync-2026-07-24
           git checkout -B sync/upstream-main upstream/main
 
           custom_commits=(
@@ -45,13 +47,14 @@ jobs:
           )
 
           for commit in "${custom_commits[@]}"; do
-            echo "Replaying ${commit}"
+            echo "=== Replaying ${commit} ==="
             if git cherry-pick -X theirs "${commit}"; then
               continue
             fi
 
             conflicts="$(git diff --name-only --diff-filter=U)"
             if [ -z "${conflicts}" ]; then
+              echo "Cherry-pick is empty after upstream changes; skipping."
               git cherry-pick --skip
               continue
             fi
@@ -66,9 +69,28 @@ jobs:
                 git rm -f --ignore-unmatch -- "${path}"
               fi
             done <<< "${conflicts}"
-            GIT_EDITOR=true git cherry-pick --continue
+
+            if ! GIT_EDITOR=true git cherry-pick --continue; then
+              if git status --porcelain=v2 | grep -q '^u '; then
+                echo "Unresolved conflicts remain after automatic resolution."
+                git status --short
+                exit 1
+              fi
+              echo "Resolved result is empty; skipping commit."
+              git cherry-pick --skip
+            fi
           done
 
           test -z "$(git diff --name-only --diff-filter=U)"
+          git status --short
           git log --oneline --decorate -8
           git push --force origin HEAD:refs/heads/sync/upstream-main
+
+      - name: Upload sync log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-sync-log
+          path: upstream-sync.log
+          if-no-files-found: warn
+          retention-days: 3
