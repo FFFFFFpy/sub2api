@@ -1,0 +1,90 @@
+name: One-shot upstream sync
+
+on:
+  push:
+    branches:
+      - automation/sync-upstream-2026-07-24
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-shot-upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out fork history
+        uses: actions/checkout@v4
+        with:
+          ref: automation/sync-upstream-2026-07-24
+          fetch-depth: 0
+
+      - name: Rebase custom commits onto upstream main
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream https://github.com/Wei-Shaw/sub2api.git
+          git fetch upstream main
+          git fetch origin main backup/pre-upstream-sync-2026-07-24
+
+          git checkout -B sync/upstream-main upstream/main
+
+          custom_commits=(
+            44bc7048fd1a1589a16a3f37742f86d19e227d54
+            c70efa699ef6f13b1e2aba57dbfab30732db114f
+            6dfffc7833775cc9472c44241e8c05e1554cb19d
+          )
+
+          for commit in "${custom_commits[@]}"; do
+            echo "Replaying ${commit}"
+            if git cherry-pick -X theirs "${commit}"; then
+              continue
+            fi
+
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            if [ -z "${conflicts}" ]; then
+              echo "Cherry-pick became empty; skipping ${commit}"
+              git cherry-pick --skip
+              continue
+            fi
+
+            echo "Resolving conflicts in favor of the custom commit:"
+            printf '%s\n' "${conflicts}"
+
+            while IFS= read -r path; do
+              [ -n "${path}" ] || continue
+              if git ls-files -u -- "${path}" | awk '$3 == 3 { found=1 } END { exit !found }'; then
+                git checkout --theirs -- "${path}"
+                git add -- "${path}"
+              else
+                git rm -f --ignore-unmatch -- "${path}"
+              fi
+            done <<< "${conflicts}"
+
+            GIT_EDITOR=true git cherry-pick --continue
+          done
+
+          if [ -n "$(git diff --name-only --diff-filter=U)" ]; then
+            echo "Unresolved conflicts remain" >&2
+            git status --short
+            exit 1
+          fi
+
+          git status --short
+          git log --oneline --decorate -8
+          git push --force origin HEAD:refs/heads/sync/upstream-main
+
+          {
+            echo "## Upstream sync branch"
+            echo
+            echo "Created \`sync/upstream-main\` from \`Wei-Shaw/sub2api:main\` and replayed the fork's three custom commits."
+            echo
+            git log --oneline -4
+          } >> "${GITHUB_STEP_SUMMARY}"
