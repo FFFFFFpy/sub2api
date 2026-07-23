@@ -23,17 +23,21 @@ def replace_exact(rel: str, old: str, new: str, expected: int = 1) -> None:
     write(rel, text.replace(old, new))
 
 
-# Keep native OpenAI media routes isolated while allowing external-compatible
-# providers on the embeddings and rerank surfaces.
-replace_exact(
-    "backend/internal/server/routes/gateway.go",
-    '''\tisEmbeddingsGatewayPlatform := func(c *gin.Context) bool {\n''',
-    '''\tisOpenAIOnlyEndpointGatewayPlatform := func(c *gin.Context) bool {\n\t\treturn getGroupPlatform(c) == service.PlatformOpenAI\n\t}\n\tisEmbeddingsGatewayPlatform := func(c *gin.Context) bool {\n''',
-)
+# The second, no-/v1 embeddings alias must use the same platform gate as the
+# primary route. The first replay script has already replaced the original
+# OpenAI-only helper with embeddings/rerank-specific gates.
 replace_exact(
     "backend/internal/server/routes/gateway.go",
     '''\t\tif !isOpenAIOnlyEndpointGatewayPlatform(c) {\n\t\t\tservice.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)\n\t\t\tc.JSON(http.StatusNotFound, gin.H{\n\t\t\t\t"error": gin.H{\n\t\t\t\t\t"type":    "not_found_error",\n\t\t\t\t\t"message": "Embeddings API is not supported for this platform",\n\t\t\t\t},\n\t\t\t})\n\t\t\treturn\n\t\t}\n\t\th.OpenAIGateway.Embeddings(c)\n\t})\n\tr.POST("/images/generations",''',
     '''\t\tif !isEmbeddingsGatewayPlatform(c) {\n\t\t\tservice.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)\n\t\t\tc.JSON(http.StatusNotFound, gin.H{\n\t\t\t\t"error": gin.H{\n\t\t\t\t\t"type":    "not_found_error",\n\t\t\t\t\t"message": "Embeddings API is not supported for this platform",\n\t\t\t\t},\n\t\t\t})\n\t\t\treturn\n\t\t}\n\t\th.OpenAIGateway.Embeddings(c)\n\t})\n\tr.POST("/rerank", textBodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, rerankHandler)\n\tr.POST("/images/generations",''',
+)
+
+# A replayed admin CreateGroup test records inputs, while upstream refactored
+# the shared stub. Restore only the missing recorder field used by that test.
+replace_exact(
+    "backend/internal/handler/admin/admin_service_stub_test.go",
+    '''\tcreatedAccounts                     []*service.CreateAccountInput\n\tcreatedProxies                      []*service.CreateProxyInput\n''',
+    '''\tcreatedAccounts                     []*service.CreateAccountInput\n\tcreatedGroups                       []*service.CreateGroupInput\n\tcreatedProxies                      []*service.CreateProxyInput\n''',
 )
 
 # Rerank carries user prompt-like documents/query data and must pass the same
@@ -84,6 +88,7 @@ replace_exact(
 
 modified_files = [
     "backend/internal/server/routes/gateway.go",
+    "backend/internal/handler/admin/admin_service_stub_test.go",
     "backend/internal/handler/openai_rerank.go",
     "backend/internal/server/routes/prompt_audit_route_coverage_test.go",
     "backend/internal/handler/openai_chat_completions.go",
