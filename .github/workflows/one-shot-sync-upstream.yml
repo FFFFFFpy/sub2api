@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - automation/sync-upstream-2026-07-24
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -33,7 +36,6 @@ jobs:
           git remote add upstream https://github.com/Wei-Shaw/sub2api.git
           git fetch upstream main
           git fetch origin main backup/pre-upstream-sync-2026-07-24
-
           git checkout -B sync/upstream-main upstream/main
 
           custom_commits=(
@@ -50,14 +52,11 @@ jobs:
 
             conflicts="$(git diff --name-only --diff-filter=U)"
             if [ -z "${conflicts}" ]; then
-              echo "Cherry-pick became empty; skipping ${commit}"
               git cherry-pick --skip
               continue
             fi
 
-            echo "Resolving conflicts in favor of the custom commit:"
-            printf '%s\n' "${conflicts}"
-
+            printf 'Resolving in favor of custom commit:\n%s\n' "${conflicts}"
             while IFS= read -r path; do
               [ -n "${path}" ] || continue
               if git ls-files -u -- "${path}" | awk '$3 == 3 { found=1 } END { exit !found }'; then
@@ -67,24 +66,9 @@ jobs:
                 git rm -f --ignore-unmatch -- "${path}"
               fi
             done <<< "${conflicts}"
-
             GIT_EDITOR=true git cherry-pick --continue
           done
 
-          if [ -n "$(git diff --name-only --diff-filter=U)" ]; then
-            echo "Unresolved conflicts remain" >&2
-            git status --short
-            exit 1
-          fi
-
-          git status --short
+          test -z "$(git diff --name-only --diff-filter=U)"
           git log --oneline --decorate -8
           git push --force origin HEAD:refs/heads/sync/upstream-main
-
-          {
-            echo "## Upstream sync branch"
-            echo
-            echo "Created \`sync/upstream-main\` from \`Wei-Shaw/sub2api:main\` and replayed the fork's three custom commits."
-            echo
-            git log --oneline -4
-          } >> "${GITHUB_STEP_SUMMARY}"
