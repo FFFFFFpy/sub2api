@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - automation/sync-upstream-2026-07-24
-  pull_request:
-    branches:
-      - main
 
 permissions:
   contents: write
@@ -33,6 +30,8 @@ jobs:
           set -o pipefail
           exec > >(tee upstream-sync.log) 2>&1
           set -Eeuo pipefail
+
+          cp tools/port_upstream_sync_fixes.py /tmp/port_upstream_sync_fixes.py
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -84,9 +83,29 @@ jobs:
           done
 
           test -z "$(git diff --name-only --diff-filter=U)"
+          python /tmp/port_upstream_sync_fixes.py
+
+          npm install --global pnpm@9
+          pnpm --dir frontend install --lockfile-only
+
+          git add \
+            backend/internal/domain/constants.go \
+            backend/internal/service/domain_constants.go \
+            backend/internal/service/account.go \
+            backend/internal/service/openai_gateway_chat_completions_raw.go \
+            backend/internal/handler/openai_gateway_handler.go \
+            backend/internal/handler/openai_gateway_count_tokens.go \
+            backend/internal/handler/openai_embeddings.go \
+            backend/internal/handler/openai_rerank.go \
+            backend/internal/server/routes/gateway.go \
+            frontend/src/components/account/CreateAccountModal.vue \
+            frontend/package.json \
+            frontend/pnpm-lock.yaml
+          git commit -m "fix: port custom routing to latest upstream architecture"
+
           git merge -s ours --no-ff origin/main -m "Merge fork main history after upstream sync"
           git status --short
-          git log --oneline --decorate -10
+          git log --oneline --decorate -12
           git push --force origin HEAD:refs/heads/sync/upstream-main
           mkdir -p validation-logs
 
