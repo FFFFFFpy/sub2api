@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - automation/sync-upstream-2026-07-24
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
