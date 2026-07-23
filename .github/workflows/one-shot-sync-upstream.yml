@@ -26,6 +26,17 @@ jobs:
           ref: automation/sync-upstream-2026-07-24
           fetch-depth: 0
 
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          check-latest: false
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Verify Go version
+        run: go version | grep -q 'go1.26.5'
+
       - name: Rebase custom commits onto upstream main
         id: sync
         shell: bash
@@ -35,6 +46,7 @@ jobs:
           set -Eeuo pipefail
 
           cp tools/port_upstream_sync_fixes.py /tmp/port_upstream_sync_fixes.py
+          cp tools/port_upstream_sync_followup.py /tmp/port_upstream_sync_followup.py
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -87,11 +99,17 @@ jobs:
 
           test -z "$(git diff --name-only --diff-filter=U)"
           python /tmp/port_upstream_sync_fixes.py
+          python /tmp/port_upstream_sync_followup.py
+
+          (cd backend && go generate ./ent)
 
           npm install --global pnpm@9
           pnpm --dir frontend install --lockfile-only
 
           git add \
+            backend/ent \
+            backend/go.mod \
+            backend/go.sum \
             backend/internal/domain/constants.go \
             backend/internal/service/domain_constants.go \
             backend/internal/service/account.go \
@@ -102,6 +120,7 @@ jobs:
             backend/internal/handler/openai_rerank.go \
             backend/internal/server/routes/gateway.go \
             frontend/src/components/account/CreateAccountModal.vue \
+            frontend/src/types/index.ts \
             frontend/package.json \
             frontend/pnpm-lock.yaml
           git commit -m "fix: port custom routing to latest upstream architecture"
@@ -119,17 +138,6 @@ jobs:
         run: |
           set -o pipefail
           bash -n deploy/apple-container.sh 2>&1 | tee validation-logs/deployment-script.log
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: backend/go.mod
-          check-latest: false
-          cache: true
-          cache-dependency-path: backend/go.sum
-
-      - name: Verify Go version
-        run: go version | grep -q 'go1.26.5'
 
       - name: Backend unit tests
         id: unit
