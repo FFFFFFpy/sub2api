@@ -82,16 +82,14 @@ replace_exact(
     "export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'composite' | 'external_openai_compatible' | 'volcengine_coding' | 'xunfei_coding'",
 )
 
-subprocess.run(
-    [
-        "gofmt",
-        "-w",
-        "backend/internal/server/routes/gateway.go",
-        "backend/internal/handler/openai_rerank.go",
-        "backend/internal/server/routes/prompt_audit_route_coverage_test.go",
-        "backend/internal/handler/openai_chat_completions.go",
-        "backend/internal/service/openai_gateway_chat_completions_raw.go",
-        "backend/internal/server/api_contract_test.go",
-    ],
-    check=True,
-)
+modified_files = [
+    "backend/internal/server/routes/gateway.go",
+    "backend/internal/handler/openai_rerank.go",
+    "backend/internal/server/routes/prompt_audit_route_coverage_test.go",
+    "backend/internal/handler/openai_chat_completions.go",
+    "backend/internal/service/openai_gateway_chat_completions_raw.go",
+    "backend/internal/server/api_contract_test.go",
+    "frontend/src/types/index.ts",
+]
+subprocess.run(["gofmt", "-w", *[path for path in modified_files if path.endswith(".go")]], check=True)
+subprocess.run(["git", "add", *modified_files], check=True)
