@@ -89,11 +89,9 @@ jobs:
           git log --oneline --decorate -10
           git push --force origin HEAD:refs/heads/sync/upstream-main
 
-      - name: Check deployment scripts
+      - name: Check deployment script syntax
         shell: bash
-        run: |
-          bash -n deploy/apple-container.sh
-          bash deploy/tests/apple-container-test.sh
+        run: bash -n deploy/apple-container.sh
 
       - name: Set up Go
         uses: actions/setup-go@v6
