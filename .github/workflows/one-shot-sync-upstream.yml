@@ -88,10 +88,15 @@ jobs:
           git status --short
           git log --oneline --decorate -10
           git push --force origin HEAD:refs/heads/sync/upstream-main
+          mkdir -p validation-logs
 
       - name: Check deployment script syntax
+        id: shellcheck
+        continue-on-error: true
         shell: bash
-        run: bash -n deploy/apple-container.sh
+        run: |
+          set -o pipefail
+          bash -n deploy/apple-container.sh 2>&1 | tee validation-logs/deployment-script.log
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -105,14 +110,26 @@ jobs:
         run: go version | grep -q 'go1.26.5'
 
       - name: Backend unit tests
+        id: unit
+        continue-on-error: true
         working-directory: backend
-        run: make test-unit
+        shell: bash
+        run: |
+          set -o pipefail
+          make test-unit 2>&1 | tee ../validation-logs/backend-unit.log
 
       - name: Backend integration tests
+        id: integration
+        continue-on-error: true
         working-directory: backend
-        run: make test-integration
+        shell: bash
+        run: |
+          set -o pipefail
+          make test-integration 2>&1 | tee ../validation-logs/backend-integration.log
 
       - name: GolangCI-Lint
+        id: lint
+        continue-on-error: true
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.9
@@ -120,10 +137,14 @@ jobs:
           working-directory: backend
 
       - name: Govulncheck
+        id: vuln
+        continue-on-error: true
         working-directory: backend
+        shell: bash
         run: |
+          set -o pipefail
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          govulncheck ./... 2>&1 | tee ../validation-logs/govulncheck.log
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -142,23 +163,65 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Frontend typecheck and critical tests
-        run: make test-frontend
+        id: frontend
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          make test-frontend 2>&1 | tee validation-logs/frontend.log
 
       - name: Frontend audit
         working-directory: frontend
         run: pnpm audit --prod --audit-level=high --json > audit.json || true
 
       - name: Check frontend audit exceptions
+        id: audit
+        continue-on-error: true
+        shell: bash
         run: |
+          set -o pipefail
           python tools/check_pnpm_audit_exceptions.py \
             --audit frontend/audit.json \
-            --exceptions .github/audit-exceptions.yml
+            --exceptions .github/audit-exceptions.yml \
+            2>&1 | tee validation-logs/frontend-audit.log
 
-      - name: Upload sync log
+      - name: Upload validation logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: upstream-sync-log
-          path: upstream-sync.log
+          name: upstream-sync-validation
+          path: |
+            upstream-sync.log
+            validation-logs/
+            frontend/audit.json
           if-no-files-found: warn
           retention-days: 3
+
+      - name: Enforce validation results
+        if: always()
+        shell: bash
+        run: |
+          cat <<'RESULTS'
+          deployment=${{ steps.shellcheck.outcome }}
+          unit=${{ steps.unit.outcome }}
+          integration=${{ steps.integration.outcome }}
+          lint=${{ steps.lint.outcome }}
+          govulncheck=${{ steps.vuln.outcome }}
+          frontend=${{ steps.frontend.outcome }}
+          audit=${{ steps.audit.outcome }}
+          RESULTS
+
+          failed=0
+          for outcome in \
+            '${{ steps.shellcheck.outcome }}' \
+            '${{ steps.unit.outcome }}' \
+            '${{ steps.integration.outcome }}' \
+            '${{ steps.lint.outcome }}' \
+            '${{ steps.vuln.outcome }}' \
+            '${{ steps.frontend.outcome }}' \
+            '${{ steps.audit.outcome }}'; do
+            if [ "${outcome}" != "success" ]; then
+              failed=1
+            fi
+          done
+          exit "${failed}"
