@@ -48,7 +48,7 @@ jobs:
 
           for commit in "${custom_commits[@]}"; do
             echo "=== Replaying ${commit} ==="
-            if git cherry-pick -X theirs "${commit}"; then
+            if git cherry-pick -X ours "${commit}"; then
               continue
             fi
 
@@ -59,11 +59,11 @@ jobs:
               continue
             fi
 
-            printf 'Resolving in favor of custom commit:\n%s\n' "${conflicts}"
+            printf 'Resolving structural conflicts in favor of current upstream:\n%s\n' "${conflicts}"
             while IFS= read -r path; do
               [ -n "${path}" ] || continue
-              if git ls-files -u -- "${path}" | awk '$3 == 3 { found=1 } END { exit !found }'; then
-                git checkout --theirs -- "${path}"
+              if git ls-files -u -- "${path}" | awk '$3 == 2 { found=1 } END { exit !found }'; then
+                git checkout --ours -- "${path}"
                 git add -- "${path}"
               else
                 git rm -f --ignore-unmatch -- "${path}"
