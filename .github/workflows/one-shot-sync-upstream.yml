@@ -38,6 +38,7 @@ jobs:
 
           git remote add upstream https://github.com/Wei-Shaw/sub2api.git
           git fetch upstream main
+          git fetch origin main
           git checkout -B sync/upstream-main upstream/main
 
           custom_commits=(
@@ -82,8 +83,12 @@ jobs:
           done
 
           test -z "$(git diff --name-only --diff-filter=U)"
+
+          # Connect the old fork main history without changing the synchronized file tree.
+          git merge -s ours --no-ff origin/main -m "Merge fork main history after upstream sync"
+
           git status --short
-          git log --oneline --decorate -8
+          git log --oneline --decorate -10
           git push --force origin HEAD:refs/heads/sync/upstream-main
 
       - name: Upload sync log
