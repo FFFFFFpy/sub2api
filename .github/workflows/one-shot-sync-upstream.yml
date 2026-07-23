@@ -11,10 +11,6 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: one-shot-upstream-sync
-  cancel-in-progress: false
-
 jobs:
   sync-and-verify:
     runs-on: ubuntu-latest
