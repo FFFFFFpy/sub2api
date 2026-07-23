@@ -18,11 +18,15 @@ def write(rel: str, text: str) -> None:
 
 
 def replace_once(rel: str, old: str, new: str) -> None:
+    replace_exact(rel, old, new, 1)
+
+
+def replace_exact(rel: str, old: str, new: str, expected: int) -> None:
     text = read(rel)
     count = text.count(old)
-    if count != 1:
-        raise RuntimeError(f"{rel}: expected exactly one match, found {count}: {old[:100]!r}")
-    write(rel, text.replace(old, new, 1))
+    if count != expected:
+        raise RuntimeError(f"{rel}: expected {expected} matches, found {count}: {old[:100]!r}")
+    write(rel, text.replace(old, new))
 
 
 def regex_replace_once(rel: str, pattern: str, replacement: str, flags: int = 0) -> None:
@@ -103,10 +107,11 @@ replace_once(
     '''\t\t\tservice.OpenAIEndpointCapabilityRerank,\n\t\t\tfalse,\n\t\t\trequestPlatform,\n''',
     '''\t\t\tservice.OpenAIEndpointCapabilityRerank,\n\t\t\tfalse,\n\t\t\tfalse,\n\t\t\ttrue,\n\t\t\trequestPlatform,\n''',
 )
-replace_once(
+replace_exact(
     "backend/internal/handler/openai_rerank.go",
     '''h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)''',
     '''h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(reqModel), false, nil)''',
+    2,
 )
 replace_once(
     "backend/internal/handler/openai_rerank.go",
