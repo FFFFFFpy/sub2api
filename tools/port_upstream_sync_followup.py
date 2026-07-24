@@ -40,6 +40,33 @@ replace_exact(
     '''\tcreatedAccounts                     []*service.CreateAccountInput\n\tcreatedGroups                       []*service.CreateGroupInput\n\tcreatedProxies                      []*service.CreateProxyInput\n''',
 )
 
+# Keep custom group platforms accepted by Gin request validation. Dedicated
+# coding providers are normalized later into the external-compatible lane.
+replace_exact(
+    "backend/internal/handler/admin/group_handler.go",
+    'binding:"omitempty,oneof=anthropic openai gemini antigravity grok composite"',
+    'binding:"omitempty,oneof=anthropic openai gemini antigravity grok composite external_openai_compatible volcengine_coding xunfei_coding"',
+    expected=2,
+)
+
+# Platform quota tests must track the canonical platform list rather than the
+# pre-extension count, and the success payload must include every platform.
+replace_exact(
+    "backend/internal/handler/admin/user_platform_quota_admin_test.go",
+    '''\t\t{"platform":"openai","daily_limit_usd":80.0,"weekly_limit_usd":300.0,"monthly_limit_usd":null},\n\t\t{"platform":"gemini","daily_limit_usd":null,"weekly_limit_usd":null,"monthly_limit_usd":null},''',
+    '''\t\t{"platform":"openai","daily_limit_usd":80.0,"weekly_limit_usd":300.0,"monthly_limit_usd":null},\n\t\t{"platform":"external_openai_compatible","daily_limit_usd":null,"weekly_limit_usd":null,"monthly_limit_usd":null},\n\t\t{"platform":"gemini","daily_limit_usd":null,"weekly_limit_usd":null,"monthly_limit_usd":null},''',
+)
+replace_exact(
+    "backend/internal/handler/admin/user_platform_quota_admin_test.go",
+    '''\tif len(cache.deleteCalls) != 5 {\n\t\tt.Errorf("expected 5 cache delete calls, got %d: %+v", len(cache.deleteCalls), cache.deleteCalls)\n\t}\n''',
+    '''\tif len(cache.deleteCalls) != len(service.AllowedQuotaPlatforms) {\n\t\tt.Errorf("expected %d cache delete calls, got %d: %+v", len(service.AllowedQuotaPlatforms), len(cache.deleteCalls), cache.deleteCalls)\n\t}\n''',
+)
+replace_exact(
+    "backend/internal/handler/admin/user_platform_quota_admin_test.go",
+    '''\t\t{"platform":"anthropic"},{"platform":"openai"},{"platform":"gemini"},{"platform":"antigravity"},{"platform":"grok"},{"platform":"anthropic"}\n''',
+    '''\t\t{"platform":"anthropic"},{"platform":"openai"},{"platform":"external_openai_compatible"},{"platform":"gemini"},{"platform":"antigravity"},{"platform":"grok"},{"platform":"anthropic"}\n''',
+)
+
 # Rerank carries user prompt-like documents/query data and must pass the same
 # security audit coordinator as other model-executing endpoints.
 replace_exact(
@@ -89,6 +116,8 @@ replace_exact(
 modified_files = [
     "backend/internal/server/routes/gateway.go",
     "backend/internal/handler/admin/admin_service_stub_test.go",
+    "backend/internal/handler/admin/group_handler.go",
+    "backend/internal/handler/admin/user_platform_quota_admin_test.go",
     "backend/internal/handler/openai_rerank.go",
     "backend/internal/server/routes/prompt_audit_route_coverage_test.go",
     "backend/internal/handler/openai_chat_completions.go",
