@@ -3757,6 +3757,27 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
+const externalOpenAIPreset = ref<'custom' | 'ark' | 'xunfei'>('custom')
+const externalRequestPassthroughEnabled = ref(false)
+const externalOpenAIEndpoints: { key: OpenAIEndpointCapability; label: string }[] = [
+  { key: 'chat_completions', label: 'Chat' },
+  { key: 'responses', label: 'Responses' },
+  { key: 'embeddings', label: 'Embeddings' },
+  { key: 'rerank', label: 'Rerank' }
+]
+const defaultExternalEndpointPaths = {
+  chat_completions: '/chat/completions',
+  responses: '/responses',
+  embeddings: '/embeddings',
+  rerank: '/rerank'
+} satisfies Record<OpenAIEndpointCapability, string>
+const externalEndpointBaseUrls = reactive<Record<OpenAIEndpointCapability, string>>({
+  chat_completions: '',
+  responses: '',
+  embeddings: '',
+  rerank: ''
+})
+const externalEndpointPaths = reactive<Record<OpenAIEndpointCapability, string>>({ ...defaultExternalEndpointPaths })
 const upstreamBillingAutoProbeEnabled = ref(true)
 
 const syncPreviewCredentials = computed(() => {

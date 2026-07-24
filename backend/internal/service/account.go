@@ -89,18 +89,13 @@ const (
 	OpenAIEndpointCapabilityChatCompletions OpenAIEndpointCapability = "chat_completions"
 	OpenAIEndpointCapabilityResponses       OpenAIEndpointCapability = "responses"
 	OpenAIEndpointCapabilityEmbeddings      OpenAIEndpointCapability = "embeddings"
+	OpenAIEndpointCapabilityRerank          OpenAIEndpointCapability = "rerank"
 	OpenAIEndpointCapabilityAlphaSearch     OpenAIEndpointCapability = "alpha_search"
 	// OpenAIEndpointCapabilityGrokMediaGeneration keeps image/video generation
 	// away from Grok accounts that are explicitly disabled or whose billing
 	// entitlement probe was forbidden. Video status lookups intentionally do not
 	// require this capability so already-submitted requests remain queryable.
 	OpenAIEndpointCapabilityGrokMediaGeneration OpenAIEndpointCapability = "grok_media_generation"
-	// OpenAIEndpointCapabilityResponses 表示上游确实提供 /v1/responses 端点。
-	// 与其他能力不同：支持状态来自 accounts.extra 的自动探测标记
-	// （openai_responses_supported / openai_responses_mode），而非
-	// credentials["openai_capabilities"] 配置集。仅用于生图意图的 /v1/responses
-	// 调度，避免把请求调度到会在 forward 阶段被降级为 Chat Completions 的账号（#4417）。
-	OpenAIEndpointCapabilityResponses OpenAIEndpointCapability = "responses"
 )
 
 const (
@@ -262,6 +257,10 @@ func (a *Account) IsExternalOpenAICompatible() bool {
 
 func (a *Account) IsLegacyExternalOpenAICompatible() bool {
 	return a != nil && (a.IsVolcengineCoding() || a.IsXunfeiCoding())
+}
+
+func (a *Account) IsExternalOpenAICompatibleAPIKey() bool {
+	return a != nil && a.Type == AccountTypeAPIKey && a.IsExternalOpenAICompatible()
 }
 
 func (a *Account) IsVolcengineCoding() bool {

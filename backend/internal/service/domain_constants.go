@@ -38,13 +38,27 @@ const (
 
 // Platform constants
 const (
-	PlatformAnthropic   = domain.PlatformAnthropic
-	PlatformOpenAI      = domain.PlatformOpenAI
-	PlatformGemini      = domain.PlatformGemini
-	PlatformAntigravity = domain.PlatformAntigravity
-	PlatformGrok        = domain.PlatformGrok
-	PlatformComposite   = domain.PlatformComposite
+	PlatformAnthropic        = domain.PlatformAnthropic
+	PlatformOpenAI           = domain.PlatformOpenAI
+	PlatformGemini           = domain.PlatformGemini
+	PlatformAntigravity      = domain.PlatformAntigravity
+	PlatformGrok             = domain.PlatformGrok
+	PlatformComposite        = domain.PlatformComposite
+	PlatformExternalOpenAI   = domain.PlatformExternalOpenAI
+	PlatformVolcengineCoding = domain.PlatformVolcengineCoding
+	PlatformXunfeiCoding     = domain.PlatformXunfeiCoding
 )
+
+// NormalizeOpenAICompatiblePlatformForRouting folds the legacy dedicated coding
+// provider identifiers into the shared external OpenAI-compatible routing lane.
+func NormalizeOpenAICompatiblePlatformForRouting(platform string) string {
+	switch platform {
+	case PlatformVolcengineCoding, PlatformXunfeiCoding:
+		return PlatformExternalOpenAI
+	default:
+		return platform
+	}
+}
 
 // AllowedQuotaPlatforms 是允许设置 user × platform quota 的平台列表（单一权威来源）。
 // ent/schema/user_platform_quota.go 的 Validate 函数独立维护（构建期约束），

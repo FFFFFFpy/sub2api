@@ -112,7 +112,6 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 		}
 		upstreamBody = updatedBody
 	}
-	upstreamBody = updatedBody
 
 	// Grok Composer does not accept image_url parts directly, but Grok Build
 	// can describe the images first. Bridge only this exact failure mode.
@@ -140,7 +139,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 		}
 	}
 
-	if clientStream {
+	if clientStream && !requestPassthrough {
 		var usageErr error
 		upstreamBody, usageErr = ensureOpenAIChatStreamUsage(upstreamBody)
 		if usageErr != nil {
@@ -164,7 +163,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	)
 
 	// 5. Build and send upstream request via the shared CC pipeline
-	targetURL, err := s.rawChatCompletionsURL(account)
+	targetURL, err := s.rawChatCompletionsURL(account, externalOpenAIIncomingPath(c))
 	if err != nil {
 		return nil, err
 	}
