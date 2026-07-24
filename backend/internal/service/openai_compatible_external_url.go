@@ -51,21 +51,6 @@ func defaultExternalOpenAIEndpointPath(endpoint ExternalOpenAIEndpoint) string {
 	}
 }
 
-func externalOpenAIEndpointFromCapability(capability OpenAIEndpointCapability) ExternalOpenAIEndpoint {
-	switch capability {
-	case OpenAIEndpointCapabilityChatCompletions:
-		return ExternalEndpointChatCompletions
-	case OpenAIEndpointCapabilityResponses:
-		return ExternalEndpointResponses
-	case OpenAIEndpointCapabilityEmbeddings:
-		return ExternalEndpointEmbeddings
-	case OpenAIEndpointCapabilityRerank:
-		return ExternalEndpointRerank
-	default:
-		return ""
-	}
-}
-
 func credentialStringMap(credentials map[string]any, key string) map[string]string {
 	if credentials == nil {
 		return nil
@@ -180,14 +165,6 @@ func externalOpenAIIncomingPath(c *gin.Context) string {
 		return ""
 	}
 	return c.Request.URL.RequestURI()
-}
-
-func (s *OpenAIGatewayService) externalOpenAICompatibleResponsesURL(account *Account, incomingPath string) (string, bool, error) {
-	if account == nil || !account.IsExternalOpenAICompatibleAPIKey() {
-		return "", false, nil
-	}
-	targetURL, err := s.externalOpenAICompatibleURL(account, ExternalEndpointResponses, incomingPath)
-	return targetURL, true, err
 }
 
 const externalOpenAIRequestPassthroughContextKey = "external_openai_request_passthrough"
